@@ -37,6 +37,20 @@ header {
 
 .screen.hidden { display: none; }
 
+/* Mode Selection */
+.mode-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.mode-btn {
+    font-size: 1.1rem;
+    padding: 15px 25px;
+    background: #fef08a;
+}
+
 /* Character Selection */
 .char-grid {
     display: grid;
