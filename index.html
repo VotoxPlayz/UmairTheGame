@@ -10,15 +10,15 @@
     <div id="game-container">
         <!-- Header / Stage Info -->
         <header>
-            <h1>Umair: The Game</h1>
+            <h1>⚡ UMAIR: THE GAME ⚡</h1>
             <div id="round-indicator">Round <span id="round-num">1</span></div>
             <div id="turn-indicator">Turn: <span id="current-turn-label">Player 1</span></div>
         </header>
 
         <!-- Game Mode Selection Screen -->
         <div id="mode-select-screen" class="screen">
-            <h2>Select Game Mode</h2>
-            <p>Choose how you want to play Umair: The Game.</p>
+            <h2>SELECT GAME MODE</h2>
+            <p>Choose your battlefield format.</p>
             <div class="mode-buttons">
                 <button class="btn mode-btn" onclick="setGameMode('ai')">🤖 VS AI (Single Player)</button>
                 <button class="btn mode-btn" onclick="setGameMode('local')">👥 Local Versus (2 Players)</button>
@@ -27,8 +27,8 @@
 
         <!-- Character Selection Screen -->
         <div id="char-select-screen" class="screen hidden">
-            <h2 id="char-select-title">Player 1: Select Your Character</h2>
-            <p>Each character grants a unique Passive and a One-Time Ultimate Ability.</p>
+            <h2 id="char-select-title">PLAYER 1: SELECT CHARACTER</h2>
+            <p>Choose your fighter to gain unique Passive and Ultimate abilities.</p>
             <div class="char-grid">
                 <div class="char-card" onclick="selectCharacter('K')">
                     <h3>K</h3>
@@ -61,8 +61,8 @@
                     <div class="char-badge" id="p1-char-badge">K</div>
                     <h3>Player 1</h3>
                     <div class="stats">
-                        <div class="stat-bar hp-bar"><div id="p1-hp-fill" class="fill"></div><span id="p1-hp-text">50.0/50</span></div>
-                        <div class="stat-bar eitr-bar"><div id="p1-eitr-fill" class="fill"></div><span id="p1-eitr-text">30/30</span></div>
+                        <div class="stat-bar hp-bar"><div id="p1-hp-fill" class="fill"></div><span id="p1-hp-text">❤️ 50.0/50</span></div>
+                        <div class="stat-bar eitr-bar"><div id="p1-eitr-fill" class="fill"></div><span id="p1-eitr-text">🔮 30/30</span></div>
                         <div class="ult-badge" id="p1-ult-badge">Ult: Ready ⚡</div>
                     </div>
                     <div class="letters-row" id="p1-letters"></div>
@@ -75,8 +75,8 @@
                     <div class="char-badge" id="p2-char-badge">A</div>
                     <h3 id="p2-header-title">Player 2</h3>
                     <div class="stats">
-                        <div class="stat-bar hp-bar"><div id="p2-hp-fill" class="fill"></div><span id="p2-hp-text">50.0/50</span></div>
-                        <div class="stat-bar eitr-bar"><div id="p2-eitr-fill" class="fill"></div><span id="p2-eitr-text">30/30</span></div>
+                        <div class="stat-bar hp-bar"><div id="p2-hp-fill" class="fill"></div><span id="p2-hp-text">❤️ 50.0/50</span></div>
+                        <div class="stat-bar eitr-bar"><div id="p2-eitr-fill" class="fill"></div><span id="p2-eitr-text">🔮 30/30</span></div>
                         <div class="ult-badge" id="p2-ult-badge">Ult: Ready ⚡</div>
                     </div>
                     <div class="letters-row" id="p2-letters"></div>
@@ -90,11 +90,19 @@
             <!-- Action Controls Panel -->
             <div id="controls-panel">
                 <h3><span id="control-owner-tag">Player 1</span> - Active Letter: <span id="active-letter-tag">None</span></h3>
+                
+                <!-- Dynamic Hover Tooltip Display -->
+                <div id="ability-tooltip" class="tooltip-box">Hover over an ability to inspect its power.</div>
+
                 <div class="action-buttons">
-                    <button id="btn-ability-1" class="btn action-btn" onclick="triggerAbility(1)">Ability 1</button>
-                    <button id="btn-ability-2" class="btn action-btn" onclick="triggerAbility(2)">Ability 2</button>
-                    <button id="btn-ultimate" class="btn ult-btn" onclick="triggerUltimate()">Ultimate</button>
-                    <button id="btn-skip" class="btn skip-btn" onclick="skipTurn()">Skip Turn (+<span id="skip-eitr-val">3</span> Eitr)</button>
+                    <button id="btn-ability-1" class="btn action-btn" 
+                        onmouseenter="showAbilityInfo(1)" onmouseleave="clearAbilityInfo()" onclick="triggerAbility(1)">Ability 1</button>
+                    <button id="btn-ability-2" class="btn action-btn" 
+                        onmouseenter="showAbilityInfo(2)" onmouseleave="clearAbilityInfo()" onclick="triggerAbility(2)">Ability 2</button>
+                    <button id="btn-ultimate" class="btn ult-btn" 
+                        onmouseenter="showUltInfo()" onmouseleave="clearAbilityInfo()" onclick="triggerUltimate()">Ultimate</button>
+                    <button id="btn-skip" class="btn skip-btn" 
+                        onmouseenter="showSkipInfo()" onmouseleave="clearAbilityInfo()" onclick="skipTurn()">Skip Turn (+<span id="skip-eitr-val">3</span> 🔮)</button>
                     <button id="btn-end-turn" class="btn end-btn" onclick="endTurn()">End Turn</button>
                 </div>
             </div>
