@@ -15,7 +15,7 @@ let gameState = {
     lastUsedAbilityP1: null,
     lastUsedAbilityP2: null,
     charSelectStep: 1,
-    targetingState: null, // { type: 'ability'|'ult', slot, ability, reqTargets, chosenTargets: [] }
+    targetingState: null,
     lastDamageDealtByP1: 0,
     lastDamageDealtByP2: 0,
     lastDamageTakenByM_P1: 0,
@@ -34,7 +34,7 @@ const LETTER_ABILITIES = {
     },
     'A': {
         a1: { name: "Conical Happiness", cost: 15, targetType: "direct", bloodCost: 0, desc: "Heals surrounding letters by 50% of A's HP, decaying by 50% each step." },
-        a2: { name: "Unity", cost: 7, targetType: "enemy_multi", maxTargets: 2, bloodCost: 0, desc: "Deals split damage equal to 15% of your total team HP across up to 2 letters." }
+        a2: { name: "Unity", cost: 16, targetType: "enemy_multi", maxTargets: 2, bloodCost: 0, desc: "Deals split damage equal to 15% of your total team HP across up to 2 letters." }
     },
     'I': {
         a1: { name: "Poison", cost: 15, targetType: "enemy_multi", maxTargets: 2, bloodCost: 0.15, desc: "Applies ☠️ Poison (+75% damage intake) for 2 rounds to up to 2 letters. (Costs 15% Blood Magic on I)." },
@@ -59,8 +59,12 @@ class Player {
             this.letters[l] = { 
                 hp: 10.0, 
                 frozen: 0, 
-                status: null, // 'poison', 'fire', 'immunity', 'bastion'
-                statusTurns: 0 
+                statuses: {
+                    fire: false,
+                    poison: 0,     // duration in rounds (e.g., 2)
+                    immunity: 0,   // duration in rounds (e.g., 2)
+                    bastion: false
+                }
             };
         });
     }
@@ -151,7 +155,6 @@ function render() {
     document.getElementById('current-turn-label').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI Opponent' : 'Player 2');
     document.getElementById('control-owner-tag').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI' : 'Player 2');
 
-    // Skip turn button disabled if player already performed an action this turn
     document.getElementById('btn-skip').disabled = (gameState.actionsTakenTurn > 0);
 
     // Update Stats Bars
@@ -174,7 +177,6 @@ function render() {
             const isSelected = (pid === 'p1' && gameState.selectedLetterP1 === l && gameState.turn === 'p1') ||
                                (pid === 'p2' && gameState.selectedLetterP2 === l && gameState.turn === 'p2');
             
-            // Highlight targetable letters during multi-target prompt
             let isTargetable = false;
             if (gameState.targetingState) {
                 const ts = gameState.targetingState;
@@ -189,13 +191,14 @@ function render() {
             const card = document.createElement('div');
             card.className = `letter-card ${letterObj.hp <= 0 ? 'dead' : ''} ${letterObj.frozen > 0 ? 'frozen' : ''} ${isSelected ? 'selected' : ''} ${isTargetable ? 'targetable' : ''}`;
             
+            // Build Stacked Status Badges HTML
             let statusHtml = '';
             if (letterObj.hp > 0) {
-                if (letterObj.frozen > 0) statusHtml += `<span title="Frozen">❄️ Frozen</span>`;
-                if (letterObj.status === 'fire') statusHtml += `<span title="Burning">🔥 On Fire</span>`;
-                if (letterObj.status === 'poison') statusHtml += `<span title="Poisoned">☠️ Poison</span>`;
-                if (letterObj.status === 'immunity') statusHtml += `<span title="Immunity">🛡️ Immunity</span>`;
-                if (letterObj.status === 'bastion') statusHtml += `<span title="Bastion Shield">🛡️ Bastion</span>`;
+                if (letterObj.frozen > 0) statusHtml += `<div class="status-badge">❄️ Frozen</div>`;
+                if (letterObj.statuses.fire) statusHtml += `<div class="status-badge">🔥 Fire</div>`;
+                if (letterObj.statuses.poison > 0) statusHtml += `<div class="status-badge">☠️ Poison (${letterObj.statuses.poison}r)</div>`;
+                if (letterObj.statuses.immunity > 0) statusHtml += `<div class="status-badge">🛡️ Immunity (${letterObj.statuses.immunity}r)</div>`;
+                if (letterObj.statuses.bastion) statusHtml += `<div class="status-badge">🛡️ Bastion</div>`;
             }
 
             card.innerHTML = `<div>${l}</div><div style="font-size:0.75rem;">${letterObj.hp.toFixed(1)}</div><div class="status-badges">${statusHtml}</div>`;
@@ -274,7 +277,6 @@ function prepareUltimate() {
     if (!p.ultAvailable) return showPopup("Ultimate already used!");
 
     if (p.char === 'A') {
-        // Staff of Frost requires picking 2 enemy letters
         setupTargeting("ult", null, { name: "Staff of Frost" }, 'enemy', 2);
     } else {
         executeUltimateDirectly();
@@ -301,17 +303,15 @@ function handleTargetSelection(selectedLetter) {
     ts.chosenTargets.push(selectedLetter);
 
     if (ts.chosenTargets.length < ts.maxTargets) {
-        // Check if enemy has remaining live letters
-        const enemyP = gameState.turn === 'p1' ? gameState.p2 : gameState.p1;
-        const liveEnemyCount = LETTERS.filter(l => enemyP.letters[l].hp > 0).length;
-        if (ts.chosenTargets.length < liveEnemyCount) {
+        const targetP = ts.targetSide === 'enemy' ? (gameState.turn === 'p1' ? gameState.p2 : gameState.p1) : gameState[gameState.turn];
+        const liveCount = LETTERS.filter(l => targetP.letters[l].hp > 0).length;
+        if (ts.chosenTargets.length < liveCount) {
             showPopup(`Select target ${ts.targetSide} letter ${ts.chosenTargets.length + 1} of ${ts.maxTargets}`);
             render();
             return;
         }
     }
 
-    // Targets complete -> Execute
     const targets = [...ts.chosenTargets];
     const type = ts.type;
     const slot = ts.slot;
@@ -331,7 +331,6 @@ function executeTargetedAbility(slot, ability, targets) {
     const opp = gameState.turn === 'p1' ? gameState.p2 : gameState.p1;
     const activeL = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
 
-    // Deduct Eitr
     p.eitr -= ability.cost;
     p.skipStreak = 0;
     if (gameState.turn === 'p1') gameState.lastUsedAbilityP1 = ability.name;
@@ -339,17 +338,15 @@ function executeTargetedAbility(slot, ability, targets) {
 
     gameState.actionsTakenTurn++;
 
-    // Apply Blood Magic HP sacrifice on caster letter
     if (ability.bloodCost > 0) {
         const bloodSacrifice = 10.0 * ability.bloodCost;
         p.letters[activeL].hp = Math.max(0.1, p.letters[activeL].hp - bloodSacrifice);
         logCombat(`🩸 Blood Magic cost: ${activeL} sacrificed ${bloodSacrifice.toFixed(1)} HP.`);
     }
 
-    // Process Specific Abilities
     if (ability.name === "Copycat") {
         let lastDmg = gameState.turn === 'p1' ? gameState.lastDamageDealtByP2 : gameState.lastDamageDealtByP1;
-        if (lastDmg === 0) lastDmg = 3.0; // default fallback
+        if (lastDmg === 0) lastDmg = 3.0;
         applyDamageToLetter(opp, targets[0], lastDmg);
         logCombat(`${gameState.turn.toUpperCase()} Copycat dealt ${lastDmg.toFixed(1)} damage to ${targets[0]}!`);
     } else if (ability.name === "Reflect") {
@@ -358,7 +355,7 @@ function executeTargetedAbility(slot, ability, targets) {
         applyDamageToLetter(opp, targets[0], reflectDmg);
         logCombat(`${gameState.turn.toUpperCase()} Reflect dealt ${reflectDmg.toFixed(1)} damage to ${targets[0]}!`);
     } else if (ability.name === "Bastion") {
-        targets.forEach(t => { p.letters[t].status = "bastion"; });
+        targets.forEach(t => { p.letters[t].statuses.bastion = true; });
         logCombat(`${gameState.turn.toUpperCase()} applied Bastion Shield 🛡️ to ${targets.join(', ')}.`);
     } else if (ability.name === "Unity") {
         let totalTeamHp = p.getTotalHp();
@@ -366,10 +363,10 @@ function executeTargetedAbility(slot, ability, targets) {
         targets.forEach(t => { applyDamageToLetter(opp, t, splitDmg); });
         logCombat(`${gameState.turn.toUpperCase()} Unity dealt ${splitDmg.toFixed(1)} split damage to ${targets.join(', ')}.`);
     } else if (ability.name === "Poison") {
-        targets.forEach(t => { opp.letters[t].status = "poison"; });
-        logCombat(`${gameState.turn.toUpperCase()} applied ☠️ Poison (+75% dmg intake) to ${targets.join(', ')}.`);
+        targets.forEach(t => { opp.letters[t].statuses.poison = 2; }); // 2 Rounds duration
+        logCombat(`${gameState.turn.toUpperCase()} applied ☠️ Poison (2 rounds) to ${targets.join(', ')}.`);
     } else if (ability.name === "Staff of Embers") {
-        targets.forEach(t => { opp.letters[t].status = "fire"; });
+        targets.forEach(t => { opp.letters[t].statuses.fire = true; });
         logCombat(`${gameState.turn.toUpperCase()} applied 🔥 On Fire (-25% HP/round) to ${targets.join(', ')}.`);
     } else if (ability.name === "Eitr-Refined Happiness") {
         let healAmt = targets.length === 1 ? (p.eitr * 1.0) : (p.eitr * 0.5);
@@ -377,15 +374,15 @@ function executeTargetedAbility(slot, ability, targets) {
         targets.forEach(t => { p.letters[t].hp = Math.min(10.0, p.letters[t].hp + healAmt); });
         logCombat(`${gameState.turn.toUpperCase()} Eitr-Refined Happiness healed ${targets.join(', ')} by +${healAmt.toFixed(1)} HP.`);
     } else if (ability.name === "Staff of Immunity") {
-        targets.forEach(t => { p.letters[t].status = "immunity"; });
-        logCombat(`${gameState.turn.toUpperCase()} applied Staff of Immunity 🛡️ to ${targets.join(', ')}.`);
+        targets.forEach(t => { p.letters[t].statuses.immunity = 2; }); // 2 Rounds duration
+        logCombat(`${gameState.turn.toUpperCase()} applied Staff of Immunity 🛡️ (2 rounds) to ${targets.join(', ')}.`);
     }
 
     checkWinCondition();
     render();
 }
 
-// Execute Direct Abilities (No targeting required)
+// Execute Direct Abilities
 function executeDirectAbility(slot, ability) {
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     const activeL = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
@@ -402,7 +399,7 @@ function executeDirectAbility(slot, ability) {
         if (deadLetters.length > 0) {
             let revKey = deadLetters[0];
             p.letters[revKey].hp = 3.0;
-            p.letters[revKey].status = null;
+            p.letters[revKey].statuses = { fire: false, poison: 0, immunity: 0, bastion: false };
             logCombat(`${gameState.turn.toUpperCase()} Resurrection revived letter ${revKey} with 3.0 HP!`);
         } else {
             let lowestKey = LETTERS.reduce((minKey, k) => p.letters[k].hp < p.letters[minKey].hp ? k : minKey, 'U');
@@ -410,18 +407,15 @@ function executeDirectAbility(slot, ability) {
             logCombat(`${gameState.turn.toUpperCase()} Resurrection healed letter ${lowestKey} by 5.0 HP.`);
         }
     } else if (ability.name === "Conical Happiness") {
-        // Heal adjacent letters decaying by 50%
         let idx = LETTERS.indexOf(activeL);
         let baseHeal = p.letters[activeL].hp * 0.5;
         
-        // Heal Right
         if (idx + 1 < LETTERS.length && p.letters[LETTERS[idx + 1]].hp > 0) {
             p.letters[LETTERS[idx + 1]].hp = Math.min(10.0, p.letters[LETTERS[idx + 1]].hp + baseHeal);
             if (idx + 2 < LETTERS.length && p.letters[LETTERS[idx + 2]].hp > 0) {
                 p.letters[LETTERS[idx + 2]].hp = Math.min(10.0, p.letters[LETTERS[idx + 2]].hp + (baseHeal * 0.5));
             }
         }
-        // Heal Left
         if (idx - 1 >= 0 && p.letters[LETTERS[idx - 1]].hp > 0) {
             p.letters[LETTERS[idx - 1]].hp = Math.min(10.0, p.letters[LETTERS[idx - 1]].hp + baseHeal);
             if (idx - 2 >= 0 && p.letters[LETTERS[idx - 2]].hp > 0) {
@@ -445,16 +439,17 @@ function executeUltimateDirectly() {
     if (p.char === 'K') {
         logCombat(`${gameState.turn.toUpperCase()} activated Deflect (Ult)! Reflects 100% damage & restores Eitr.`);
     } else if (p.char === 'H') {
-        LETTERS.forEach(l => { if (p.letters[l].hp > 0) p.letters[l].status = "immunity"; });
+        LETTERS.forEach(l => { if (p.letters[l].hp > 0) p.letters[l].statuses.immunity = 2; });
         logCombat(`${gameState.turn.toUpperCase()} activated Absorb (Ult)! 95% damage resistance for 2 turns.`);
     } else if (p.char === 'N') {
         let maxHp = p.getHighestHpLetter();
         LETTERS.forEach(l => {
             if (p.letters[l].hp > 0) {
                 p.letters[l].hp = Math.min(10.0, p.letters[l].hp + (maxHp * 0.5));
+                p.letters[l].statuses.immunity = 2;
             }
         });
-        logCombat(`${gameState.turn.toUpperCase()} activated Greydwarf Shaman (Ult)! Healed team by 50% of highest HP.`);
+        logCombat(`${gameState.turn.toUpperCase()} activated Greydwarf Shaman (Ult)! Healed team by 50% of highest HP (${(maxHp * 0.5).toFixed(1)} HP).`);
     }
 
     checkWinCondition();
@@ -486,20 +481,17 @@ function executeUltimateTargeted(targets) {
 function applyDamageToLetter(targetPlayer, letterKey, rawDamage) {
     let finalDmg = rawDamage;
 
-    // Target Status modifiers
-    if (targetPlayer.letters[letterKey].status === "poison") finalDmg *= 1.75;
-    if (targetPlayer.letters[letterKey].status === "immunity") finalDmg *= 0.5;
-    if (targetPlayer.letters[letterKey].status === "bastion") {
+    if (targetPlayer.letters[letterKey].statuses.poison > 0) finalDmg *= 1.75;
+    if (targetPlayer.letters[letterKey].statuses.immunity > 0) finalDmg *= 0.5;
+    if (targetPlayer.letters[letterKey].statuses.bastion) {
         finalDmg *= 0.5;
-        targetPlayer.letters[letterKey].status = null; // shield breaks on hit
+        targetPlayer.letters[letterKey].statuses.bastion = false;
     }
 
-    // Character Passive Modifiers
-    if (targetPlayer.char === 'H') finalDmg *= 0.85; // Shield passive -15%
+    if (targetPlayer.char === 'H') finalDmg *= 0.85;
 
     targetPlayer.letters[letterKey].hp = Math.max(0, targetPlayer.letters[letterKey].hp - finalDmg);
 
-    // Track damage for Copycat & Reflect
     if (targetPlayer.id === 'p1') {
         gameState.lastDamageDealtByP2 = finalDmg;
         if (letterKey === 'M') gameState.lastDamageTakenByM_P1 = finalDmg;
@@ -508,7 +500,6 @@ function applyDamageToLetter(targetPlayer, letterKey, rawDamage) {
         if (letterKey === 'M') gameState.lastDamageTakenByM_P2 = finalDmg;
     }
 
-    // Passive: K Thorns
     if (targetPlayer.char === 'K') {
         const attackerPlayer = targetPlayer.id === 'p1' ? gameState.p2 : gameState.p1;
         const thornReflect = finalDmg * 0.10;
@@ -517,7 +508,7 @@ function applyDamageToLetter(targetPlayer, letterKey, rawDamage) {
     }
 }
 
-// Skip Turn Logic (Forfeits action plays for the turn)
+// Skip Turn Logic
 function skipTurn() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
     if (gameState.actionsTakenTurn > 0) return showPopup("Cannot skip turn after taking an action!");
@@ -531,7 +522,7 @@ function skipTurn() {
     endTurn();
 }
 
-// End Turn
+// End Turn & Process Round Decrements (Fire DoT, Poison, Immunity)
 function endTurn() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
     gameState.targetingState = null;
@@ -544,14 +535,16 @@ function endTurn() {
         document.getElementById('round-num').innerText = gameState.round;
     }
 
-    // Round start ticks (Fire damage DoT & frozen decay)
+    // Process Status Decay for Active Turn Player
     const p = gameState[gameState.turn];
     LETTERS.forEach(l => {
         if (p.letters[l].hp > 0) {
-            if (p.letters[l].status === "fire") {
+            if (p.letters[l].statuses.fire) {
                 p.letters[l].hp = Math.max(0, p.letters[l].hp - 2.5);
                 logCombat(`🔥 Fire DoT dealt 2.5 damage to ${p.id.toUpperCase()}'s letter ${l}.`);
             }
+            if (p.letters[l].statuses.poison > 0) p.letters[l].statuses.poison--;
+            if (p.letters[l].statuses.immunity > 0) p.letters[l].statuses.immunity--;
             if (p.letters[l].frozen > 0) p.letters[l].frozen--;
         }
     });
@@ -566,7 +559,7 @@ function endTurn() {
     }
 }
 
-// Basic AI Engine
+// Smart AI Turn Engine
 function aiTurn() {
     const aiPlayer = gameState.p2;
     const targetPlayer = gameState.p1;
@@ -584,13 +577,16 @@ function aiTurn() {
             let ability = LETTER_ABILITIES[chosenLetter][abilityKey];
 
             if (aiPlayer.eitr >= ability.cost && gameState.lastUsedAbilityP2 !== ability.name) {
-                aiPlayer.eitr -= ability.cost;
-                aiPlayer.skipStreak = 0;
-                gameState.lastUsedAbilityP2 = ability.name;
-
-                let targetLetter = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
-                applyDamageToLetter(targetPlayer, targetLetter, 3.5);
-                logCombat(`AI used ${ability.name} on your letter ${targetLetter}, dealing 3.5 damage!`);
+                // AI executes ability using the exact core logic
+                if (ability.targetType === "enemy_single" || ability.targetType === "enemy_multi") {
+                    let targets = [aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)]];
+                    executeTargetedAbility(1, ability, targets);
+                } else if (ability.targetType === "friendly_multi" || ability.targetType === "friendly_eitr_choice") {
+                    let targets = [aliveLetters[Math.floor(Math.random() * aliveLetters.length)]];
+                    executeTargetedAbility(1, ability, targets);
+                } else {
+                    executeDirectAbility(1, ability);
+                }
             } else {
                 let gain = 3 * Math.pow(2, aiPlayer.skipStreak);
                 aiPlayer.eitr = Math.min(MAX_EITR, aiPlayer.eitr + gain);
