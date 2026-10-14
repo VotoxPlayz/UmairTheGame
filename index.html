@@ -12,12 +12,22 @@
         <header>
             <h1>Umair: The Game</h1>
             <div id="round-indicator">Round <span id="round-num">1</span></div>
-            <div id="turn-indicator">Your Turn!</div>
+            <div id="turn-indicator">Turn: <span id="current-turn-label">Player 1</span></div>
         </header>
 
+        <!-- Game Mode Selection Screen -->
+        <div id="mode-select-screen" class="screen">
+            <h2>Select Game Mode</h2>
+            <p>Choose how you want to play Umair: The Game.</p>
+            <div class="mode-buttons">
+                <button class="btn mode-btn" onclick="setGameMode('ai')">🤖 VS AI (Single Player)</button>
+                <button class="btn mode-btn" onclick="setGameMode('local')">👥 Local Versus (2 Players)</button>
+            </div>
+        </div>
+
         <!-- Character Selection Screen -->
-        <div id="char-select-screen" class="screen">
-            <h2>Select Your Character</h2>
+        <div id="char-select-screen" class="screen hidden">
+            <h2 id="char-select-title">Player 1: Select Your Character</h2>
             <p>Each character grants a unique Passive and a One-Time Ultimate Ability.</p>
             <div class="char-grid">
                 <div class="char-card" onclick="selectCharacter('K')">
@@ -46,9 +56,10 @@
         <!-- Main Battle Screen -->
         <div id="battle-screen" class="screen hidden">
             <div class="battlefield">
-                <!-- Player Area -->
+                <!-- Player 1 Area -->
                 <div class="player-side" id="p1-side">
                     <div class="char-badge" id="p1-char-badge">K</div>
+                    <h3>Player 1</h3>
                     <div class="stats">
                         <div class="stat-bar hp-bar"><div id="p1-hp-fill" class="fill"></div><span id="p1-hp-text">50.0/50</span></div>
                         <div class="stat-bar eitr-bar"><div id="p1-eitr-fill" class="fill"></div><span id="p1-eitr-text">30/30</span></div>
@@ -59,9 +70,10 @@
 
                 <div class="vs-divider">VS</div>
 
-                <!-- Opponent Area -->
+                <!-- Player 2 / AI Area -->
                 <div class="player-side" id="p2-side">
                     <div class="char-badge" id="p2-char-badge">A</div>
+                    <h3 id="p2-header-title">Player 2</h3>
                     <div class="stats">
                         <div class="stat-bar hp-bar"><div id="p2-hp-fill" class="fill"></div><span id="p2-hp-text">50.0/50</span></div>
                         <div class="stat-bar eitr-bar"><div id="p2-eitr-fill" class="fill"></div><span id="p2-eitr-text">30/30</span></div>
@@ -77,7 +89,7 @@
 
             <!-- Action Controls Panel -->
             <div id="controls-panel">
-                <h3>Select Action for Active Letter: <span id="active-letter-tag">None</span></h3>
+                <h3><span id="control-owner-tag">Player 1</span> - Active Letter: <span id="active-letter-tag">None</span></h3>
                 <div class="action-buttons">
                     <button id="btn-ability-1" class="btn action-btn" onclick="triggerAbility(1)">Ability 1</button>
                     <button id="btn-ability-2" class="btn action-btn" onclick="triggerAbility(2)">Ability 2</button>
