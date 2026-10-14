@@ -14,30 +14,31 @@ let gameState = {
     actionsTakenTurn: 0,
     lastUsedAbilityP1: null,
     lastUsedAbilityP2: null,
-    charSelectStep: 1
+    charSelectStep: 1,
+    targetingState: null // { slot, ability } when waiting for enemy letter selection
 };
 
-// Ability definitions per Letter
+// Ability definitions per Letter (with target types and base damage/effects)
 const LETTER_ABILITIES = {
     'U': {
-        a1: { name: "Resurrection", cost: 12, desc: "Revives 1 dead letter with 3.0 HP or heals lowest HP letter by 5.0." },
-        a2: { name: "Quarter Shield", cost: 6, desc: "Reduces damage taken by 25% until hit." }
+        a1: { name: "Resurrection", cost: 12, target: "friendly", desc: "Revives 1 dead letter with 3.0 HP or heals lowest HP letter by 5.0." },
+        a2: { name: "Quarter Shield", cost: 6, target: "friendly", desc: "Reduces damage taken by 25% until hit." }
     },
     'M': {
-        a1: { name: "Copycat", cost: 12, desc: "Copies opponent's last move damage or heal." },
-        a2: { name: "Reflect", cost: 8, desc: "Reflects 75% of last damage received back." }
+        a1: { name: "Copycat", cost: 12, target: "self", desc: "Copies opponent's last move damage or heal." },
+        a2: { name: "Reflect", cost: 8, target: "enemy_single", damage: 3.0, desc: "Deals 3.0 damage and reflects incoming pressure." }
     },
     'A': {
-        a1: { name: "Conical Happiness", cost: 15, desc: "Heals adjacent letters by 50% decaying." },
-        a2: { name: "Unity", cost: 7, desc: "Deals 15% of your total team HP split between 2 letters." }
+        a1: { name: "Conical Happiness", cost: 15, target: "friendly", desc: "Heals adjacent letters by 50% decaying." },
+        a2: { name: "Unity", cost: 7, target: "enemy_single", damage: 4.0, desc: "Deals 4.0 direct damage to a selected opponent letter." }
     },
     'I': {
-        a1: { name: "Poison", cost: 15, desc: "Applies Poison (+75% damage intake) for 2 rounds." },
-        a2: { name: "Staff of Embers", cost: 10, desc: "Burns 2 opponent letters for 2.5 HP/round." }
+        a1: { name: "Poison", cost: 15, target: "enemy_single", damage: 3.5, desc: "Poisons target letter, dealing 3.5 damage and increasing damage intake." },
+        a2: { name: "Staff of Embers", cost: 10, target: "enemy_single", damage: 4.5, desc: "Burns target opponent letter for 4.5 damage." }
     },
     'R': {
-        a1: { name: "Eitr-Refined Happiness", cost: 12, desc: "Heals 30% of total Eitr across 2 letters." },
-        a2: { name: "Staff of Immunity", cost: 15, desc: "Grants 50% damage resistance & debuff immunity for 2 rounds." }
+        a1: { name: "Eitr-Refined Happiness", cost: 12, target: "friendly", desc: "Heals your letters using Eitr energy." },
+        a2: { name: "Staff of Immunity", cost: 15, target: "friendly", desc: "Grants 50% damage resistance & debuff immunity for 2 rounds." }
     }
 };
 
@@ -153,15 +154,28 @@ function render() {
             const isSelected = (pid === 'p1' && gameState.selectedLetterP1 === l && gameState.turn === 'p1') ||
                                (pid === 'p2' && gameState.selectedLetterP2 === l && gameState.turn === 'p2');
             
+            const isTargetable = gameState.targetingState && 
+                                 ((gameState.turn === 'p1' && pid === 'p2') || (gameState.turn === 'p2' && pid === 'p1')) && 
+                                 letterObj.hp > 0;
+
             const card = document.createElement('div');
-            card.className = `letter-card ${letterObj.hp <= 0 ? 'dead' : ''} ${letterObj.frozen > 0 ? 'frozen' : ''} ${isSelected ? 'selected' : ''}`;
+            card.className = `letter-card ${letterObj.hp <= 0 ? 'dead' : ''} ${letterObj.frozen > 0 ? 'frozen' : ''} ${isSelected ? 'selected' : ''} ${isTargetable ? 'targetable' : ''}`;
             card.innerText = `${l} (${letterObj.hp.toFixed(1)})`;
             
             card.onclick = () => {
-                if (letterObj.hp > 0 && pid === gameState.turn) {
-                    if (pid === 'p1') gameState.selectedLetterP1 = l;
-                    else gameState.selectedLetterP2 = l;
-                    render();
+                if (gameState.targetingState) {
+                    // If we are waiting for an enemy letter target selection
+                    if (isTargetable) {
+                        executeTargetedAbility(pid, l);
+                    } else {
+                        showPopup("Please select a valid live enemy letter target!");
+                    }
+                } else {
+                    if (letterObj.hp > 0 && pid === gameState.turn) {
+                        if (pid === 'p1') gameState.selectedLetterP1 = l;
+                        else gameState.selectedLetterP2 = l;
+                        render();
+                    }
                 }
             };
             row.appendChild(card);
@@ -181,8 +195,8 @@ function render() {
     document.getElementById('controls-panel').style.opacity = (gameState.turn === 'p2' && gameState.mode === 'ai') ? '0.5' : '1';
 }
 
-// Ability Triggers
-function triggerAbility(slot) {
+// Prepare Ability Click
+function prepareAbility(slot) {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
     if (gameState.actionsTakenTurn >= 2) {
         showPopup("Maximum 2 actions allowed per turn!");
@@ -205,6 +219,26 @@ function triggerAbility(slot) {
         return showPopup("Not enough 🔮 Eitr!");
     }
 
+    if (ability.target === "enemy_single") {
+        // Prompt player to click an opponent's letter
+        gameState.targetingState = { slot, ability };
+        showPopup(`Select an enemy letter to target with ${ability.name}!`);
+        render();
+    } else {
+        // Execute self/friendly buffs immediately
+        executeAbilityDirectly(slot, ability);
+    }
+}
+
+// Execute Targeted Ability on Enemy Letter
+function executeTargetedAbility(targetPlayerId, targetLetterKey) {
+    const { slot, ability } = gameState.targetingState;
+    gameState.targetingState = null;
+
+    const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
+    const casterLetter = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
+    const targetPlayer = gameState[targetPlayerId];
+
     p.eitr -= ability.cost;
     p.skipStreak = 0;
     if (gameState.turn === 'p1') gameState.lastUsedAbilityP1 = ability.name;
@@ -212,8 +246,47 @@ function triggerAbility(slot) {
 
     gameState.actionsTakenTurn++;
 
-    logCombat(`${gameState.turn.toUpperCase()} used ${ability.name} on letter ${l}!`);
-    showPopup(`Used ${ability.name}!`);
+    // Apply damage to target letter
+    let dmg = ability.damage || 3.0;
+    targetPlayer.letters[targetLetterKey].hp = Math.max(0, targetPlayer.letters[targetLetterKey].hp - dmg);
+
+    logCombat(`${gameState.turn.toUpperCase()} used ${ability.name} from letter ${casterLetter} on opponent letter ${targetLetterKey}, dealing ${dmg} damage!`);
+    showPopup(`Dealt ${dmg} damage to ${targetLetterKey}!`);
+
+    checkWinCondition();
+    render();
+}
+
+// Execute Non-Targeted Abilities
+function executeAbilityDirectly(slot, ability) {
+    const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
+    const l = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
+
+    p.eitr -= ability.cost;
+    p.skipStreak = 0;
+    if (gameState.turn === 'p1') gameState.lastUsedAbilityP1 = ability.name;
+    else gameState.lastUsedAbilityP2 = ability.name;
+
+    gameState.actionsTakenTurn++;
+
+    // Sample effect for friendly support abilities
+    if (ability.name === "Resurrection") {
+        let deadLetters = LETTERS.filter(letKey => p.letters[letKey].hp <= 0);
+        if (deadLetters.length > 0) {
+            let revKey = deadLetters[0];
+            p.letters[revKey].hp = 3.0;
+            logCombat(`${gameState.turn.toUpperCase()} revived letter ${revKey} with 3.0 HP!`);
+            showPopup(`Revived ${revKey}!`);
+        } else {
+            let lowestKey = LETTERS.reduce((minKey, k) => p.letters[k].hp < p.letters[minKey].hp ? k : minKey, 'U');
+            p.letters[lowestKey].hp = Math.min(10.0, p.letters[lowestKey].hp + 5.0);
+            logCombat(`${gameState.turn.toUpperCase()} healed letter ${lowestKey} by 5.0 HP.`);
+            showPopup(`Healed ${lowestKey}!`);
+        }
+    } else {
+        logCombat(`${gameState.turn.toUpperCase()} used ${ability.name} on letter ${l}!`);
+        showPopup(`Used ${ability.name}!`);
+    }
 
     checkWinCondition();
     render();
@@ -239,6 +312,7 @@ function triggerUltimate() {
 // Skip Turn Logic
 function skipTurn() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
+    gameState.targetingState = null;
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     const gain = 3 * Math.pow(2, p.skipStreak);
     p.eitr = Math.min(MAX_EITR, p.eitr + gain);
@@ -250,6 +324,7 @@ function skipTurn() {
 // End Turn & Pass to Next Player / AI
 function endTurn() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
+    gameState.targetingState = null;
 
     gameState.actionsTakenTurn = 0;
     gameState.turn = gameState.turn === 'p1' ? 'p2' : 'p1';
@@ -272,11 +347,14 @@ function endTurn() {
 // AI Turn Logic
 function aiTurn() {
     const aiPlayer = gameState.p2;
+    const targetPlayer = gameState.p1;
     logCombat(`AI is thinking...`);
 
     setTimeout(() => {
         let aliveLetters = LETTERS.filter(l => aiPlayer.letters[l].hp > 0);
-        if (aliveLetters.length > 0) {
+        let aliveOpponents = LETTERS.filter(l => targetPlayer.letters[l].hp > 0);
+
+        if (aliveLetters.length > 0 && aliveOpponents.length > 0) {
             let chosenLetter = aliveLetters[Math.floor(Math.random() * aliveLetters.length)];
             gameState.selectedLetterP2 = chosenLetter;
             
@@ -287,8 +365,17 @@ function aiTurn() {
                 aiPlayer.eitr -= ability.cost;
                 aiPlayer.skipStreak = 0;
                 gameState.lastUsedAbilityP2 = ability.name;
-                logCombat(`AI used ${ability.name} on letter ${chosenLetter}!`);
-                showPopup(`AI used ${ability.name}!`);
+
+                if (ability.target === "enemy_single") {
+                    let targetLetter = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
+                    let dmg = ability.damage || 3.0;
+                    targetPlayer.letters[targetLetter].hp = Math.max(0, targetPlayer.letters[targetLetter].hp - dmg);
+                    logCombat(`AI used ${ability.name} on your letter ${targetLetter}, dealing ${dmg} damage!`);
+                    showPopup(`AI attacked your ${targetLetter} for ${dmg} dmg!`);
+                } else {
+                    logCombat(`AI used ${ability.name} on letter ${chosenLetter}!`);
+                    showPopup(`AI used ${ability.name}!`);
+                }
             } else {
                 let gain = 3 * Math.pow(2, aiPlayer.skipStreak);
                 aiPlayer.eitr = Math.min(MAX_EITR, aiPlayer.eitr + gain);
