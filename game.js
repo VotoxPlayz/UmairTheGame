@@ -38,7 +38,7 @@ const LETTER_ABILITIES = {
     },
     'I': {
         a1: { name: "Poison", cost: 15, targetType: "enemy_multi", maxTargets: 2, bloodCost: 0.15, desc: "Applies ☠️ Poison (+75% damage intake) for 2 rounds to up to 2 letters. (Costs 15% Blood Magic on I)." },
-        a2: { name: "Staff of Embers", cost: 10, targetType: "enemy_multi", maxTargets: 2, bloodCost: 0.08, desc: "Applies 🔥 On Fire (-25% HP/round) to up to 2 letters. (Costs 8% Blood Magic on I)." }
+        a2: { name: "Staff of Embers", cost: 10, targetType: "enemy_multi", maxTargets: 2, bloodCost: 0.08, desc: "Applies 🔥 On Fire (-25% current HP/round) to up to 2 letters. Clears when letter uses an ability. (Costs 8% Blood Magic on I)." }
     },
     'R': {
         a1: { name: "Eitr-Refined Happiness", cost: 12, targetType: "friendly_eitr_choice", bloodCost: 0, desc: "Heals 1 letter by 100% of total Eitr OR 2 letters by 50% of total Eitr." },
@@ -61,8 +61,8 @@ class Player {
                 frozen: 0, 
                 statuses: {
                     fire: false,
-                    poison: 0,     // duration in rounds (e.g., 2)
-                    immunity: 0,   // duration in rounds (e.g., 2)
+                    poison: 0,
+                    immunity: 0,
                     bastion: false
                 }
             };
@@ -79,6 +79,10 @@ class Player {
             if (this.letters[l].hp > this.letters[maxL].hp) maxL = l;
         });
         return this.letters[maxL].hp;
+    }
+
+    getBastionCount() {
+        return LETTERS.filter(l => this.letters[l].statuses.bastion).length;
     }
 }
 
@@ -129,7 +133,7 @@ function showAbilityInfo(slot) {
 
 function showUltInfo() {
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
-    let ultName = "Ultimate Ability", ultDesc = "One-time powerful game-changing skill.";
+    let ultName = "Ultimate Ability", ultDesc = "One-time powerful game-changing skill. Consumes entire turn!";
     if (p.char === 'K') { ultName = "Deflect"; ultDesc = "Reflects 100% attack damage & regains 100% damage as 🔮."; }
     else if (p.char === 'H') { ultName = "Absorb"; ultDesc = "Absorbs attack into health + 95% damage resistance for 2 turns."; }
     else if (p.char === 'A') { ultName = "Staff of Frost"; ultDesc = "Freeze 2 opponent letters for 1 round + deals 30% of highest HP letter damage."; }
@@ -156,6 +160,7 @@ function render() {
     document.getElementById('control-owner-tag').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI' : 'Player 2');
 
     document.getElementById('btn-skip').disabled = (gameState.actionsTakenTurn > 0);
+    document.getElementById('btn-ultimate').disabled = (!activePlayer.ultAvailable || gameState.actionsTakenTurn > 0);
 
     // Update Stats Bars
     ['p1', 'p2'].forEach(pid => {
@@ -259,6 +264,11 @@ function prepareAbility(slot) {
         return showPopup("Not enough 🔮 Eitr!");
     }
 
+    // Check Bastion Cap (Max 2 letters with Bastion)
+    if (ability.name === "Bastion" && p.getBastionCount() >= 2) {
+        return showPopup("Bastion limit reached! Maximum 2 letters can have Bastion.");
+    }
+
     if (ability.targetType === "enemy_single") {
         setupTargeting("ability", slot, ability, 'enemy', 1);
     } else if (ability.targetType === "enemy_multi") {
@@ -273,6 +283,10 @@ function prepareAbility(slot) {
 // Prepare Ultimate Click
 function prepareUltimate() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
+    if (gameState.actionsTakenTurn > 0) {
+        return showPopup("Ultimates take your entire turn! Cannot cast after using an ability.");
+    }
+
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     if (!p.ultAvailable) return showPopup("Ultimate already used!");
 
@@ -338,6 +352,12 @@ function executeTargetedAbility(slot, ability, targets) {
 
     gameState.actionsTakenTurn++;
 
+    // Clear Fire Effect if active letter uses an ability
+    if (p.letters[activeL].statuses.fire) {
+        p.letters[activeL].statuses.fire = false;
+        logCombat(`🔥 Fire extinguished on ${activeL} by casting an ability!`);
+    }
+
     if (ability.bloodCost > 0) {
         const bloodSacrifice = 10.0 * ability.bloodCost;
         p.letters[activeL].hp = Math.max(0.1, p.letters[activeL].hp - bloodSacrifice);
@@ -355,7 +375,9 @@ function executeTargetedAbility(slot, ability, targets) {
         applyDamageToLetter(opp, targets[0], reflectDmg);
         logCombat(`${gameState.turn.toUpperCase()} Reflect dealt ${reflectDmg.toFixed(1)} damage to ${targets[0]}!`);
     } else if (ability.name === "Bastion") {
-        targets.forEach(t => { p.letters[t].statuses.bastion = true; });
+        targets.forEach(t => { 
+            if (p.getBastionCount() < 2) p.letters[t].statuses.bastion = true; 
+        });
         logCombat(`${gameState.turn.toUpperCase()} applied Bastion Shield 🛡️ to ${targets.join(', ')}.`);
     } else if (ability.name === "Unity") {
         let totalTeamHp = p.getTotalHp();
@@ -363,10 +385,14 @@ function executeTargetedAbility(slot, ability, targets) {
         targets.forEach(t => { applyDamageToLetter(opp, t, splitDmg); });
         logCombat(`${gameState.turn.toUpperCase()} Unity dealt ${splitDmg.toFixed(1)} split damage to ${targets.join(', ')}.`);
     } else if (ability.name === "Poison") {
-        targets.forEach(t => { opp.letters[t].statuses.poison = 2; }); // 2 Rounds duration
+        targets.forEach(t => { 
+            if (opp.letters[t].statuses.immunity <= 0) opp.letters[t].statuses.poison = 2; 
+        });
         logCombat(`${gameState.turn.toUpperCase()} applied ☠️ Poison (2 rounds) to ${targets.join(', ')}.`);
     } else if (ability.name === "Staff of Embers") {
-        targets.forEach(t => { opp.letters[t].statuses.fire = true; });
+        targets.forEach(t => { 
+            if (opp.letters[t].statuses.immunity <= 0) opp.letters[t].statuses.fire = true; 
+        });
         logCombat(`${gameState.turn.toUpperCase()} applied 🔥 On Fire (-25% HP/round) to ${targets.join(', ')}.`);
     } else if (ability.name === "Eitr-Refined Happiness") {
         let healAmt = targets.length === 1 ? (p.eitr * 1.0) : (p.eitr * 0.5);
@@ -374,7 +400,7 @@ function executeTargetedAbility(slot, ability, targets) {
         targets.forEach(t => { p.letters[t].hp = Math.min(10.0, p.letters[t].hp + healAmt); });
         logCombat(`${gameState.turn.toUpperCase()} Eitr-Refined Happiness healed ${targets.join(', ')} by +${healAmt.toFixed(1)} HP.`);
     } else if (ability.name === "Staff of Immunity") {
-        targets.forEach(t => { p.letters[t].statuses.immunity = 2; }); // 2 Rounds duration
+        targets.forEach(t => { p.letters[t].statuses.immunity = 2; });
         logCombat(`${gameState.turn.toUpperCase()} applied Staff of Immunity 🛡️ (2 rounds) to ${targets.join(', ')}.`);
     }
 
@@ -393,6 +419,12 @@ function executeDirectAbility(slot, ability) {
     else gameState.lastUsedAbilityP2 = ability.name;
 
     gameState.actionsTakenTurn++;
+
+    // Clear Fire Effect if active letter uses an ability
+    if (p.letters[activeL].statuses.fire) {
+        p.letters[activeL].statuses.fire = false;
+        logCombat(`🔥 Fire extinguished on ${activeL} by casting an ability!`);
+    }
 
     if (ability.name === "Resurrection") {
         let deadLetters = LETTERS.filter(k => p.letters[k].hp <= 0);
@@ -429,12 +461,12 @@ function executeDirectAbility(slot, ability) {
     render();
 }
 
-// Execute Ultimate Abilities
+// Execute Ultimate Abilities (Takes Entire Turn = 2 Action Slots)
 function executeUltimateDirectly() {
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     p.ultAvailable = false;
     p.skipStreak = 0;
-    gameState.actionsTakenTurn++;
+    gameState.actionsTakenTurn = 2; // Consumes entire turn
 
     if (p.char === 'K') {
         logCombat(`${gameState.turn.toUpperCase()} activated Deflect (Ult)! Reflects 100% damage & restores Eitr.`);
@@ -461,13 +493,13 @@ function executeUltimateTargeted(targets) {
     const opp = gameState.turn === 'p1' ? gameState.p2 : gameState.p1;
     p.ultAvailable = false;
     p.skipStreak = 0;
-    gameState.actionsTakenTurn++;
+    gameState.actionsTakenTurn = 2; // Consumes entire turn
 
     if (p.char === 'A') {
         let maxHp = p.getHighestHpLetter();
         let dmg = maxHp * 0.3;
         targets.forEach(t => {
-            opp.letters[t].frozen = 1;
+            if (opp.letters[t].statuses.immunity <= 0) opp.letters[t].frozen = 1;
             applyDamageToLetter(opp, t, dmg);
         });
         logCombat(`${gameState.turn.toUpperCase()} Staff of Frost (Ult) froze and dealt ${dmg.toFixed(1)} dmg to ${targets.join(', ')}!`);
@@ -522,7 +554,7 @@ function skipTurn() {
     endTurn();
 }
 
-// End Turn & Process Round Decrements (Fire DoT, Poison, Immunity)
+// End Turn & Process Full-Round Status Decay
 function endTurn() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
     gameState.targetingState = null;
@@ -530,24 +562,30 @@ function endTurn() {
     gameState.actionsTakenTurn = 0;
     gameState.turn = gameState.turn === 'p1' ? 'p2' : 'p1';
 
+    // A full round completes when P2/AI finishes turn
     if (gameState.turn === 'p1') {
         gameState.round++;
         document.getElementById('round-num').innerText = gameState.round;
-    }
 
-    // Process Status Decay for Active Turn Player
-    const p = gameState[gameState.turn];
-    LETTERS.forEach(l => {
-        if (p.letters[l].hp > 0) {
-            if (p.letters[l].statuses.fire) {
-                p.letters[l].hp = Math.max(0, p.letters[l].hp - 2.5);
-                logCombat(`🔥 Fire DoT dealt 2.5 damage to ${p.id.toUpperCase()}'s letter ${l}.`);
-            }
-            if (p.letters[l].statuses.poison > 0) p.letters[l].statuses.poison--;
-            if (p.letters[l].statuses.immunity > 0) p.letters[l].statuses.immunity--;
-            if (p.letters[l].frozen > 0) p.letters[l].frozen--;
-        }
-    });
+        // Process End-of-Round Status Ticks for BOTH Players
+        ['p1', 'p2'].forEach(pid => {
+            const playerObj = gameState[pid];
+            LETTERS.forEach(l => {
+                const letter = playerObj.letters[l];
+                if (letter.hp > 0) {
+                    // 🔥 Fire DoT takes -25% of current HP per round
+                    if (letter.statuses.fire) {
+                        const fireDmg = letter.hp * 0.25;
+                        letter.hp = Math.max(0, letter.hp - fireDmg);
+                        logCombat(`🔥 Fire DoT dealt ${fireDmg.toFixed(1)} damage (-25%) to ${pid.toUpperCase()}'s letter ${l}.`);
+                    }
+                    if (letter.statuses.poison > 0) letter.statuses.poison--;
+                    if (letter.statuses.immunity > 0) letter.statuses.immunity--;
+                    if (letter.frozen > 0) letter.frozen--;
+                }
+            });
+        });
+    }
 
     gameState.p1.eitr = Math.min(MAX_EITR, gameState.p1.eitr + 1);
     gameState.p2.eitr = Math.min(MAX_EITR, gameState.p2.eitr + 1);
@@ -577,7 +615,6 @@ function aiTurn() {
             let ability = LETTER_ABILITIES[chosenLetter][abilityKey];
 
             if (aiPlayer.eitr >= ability.cost && gameState.lastUsedAbilityP2 !== ability.name) {
-                // AI executes ability using the exact core logic
                 if (ability.targetType === "enemy_single" || ability.targetType === "enemy_multi") {
                     let targets = [aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)]];
                     executeTargetedAbility(1, ability, targets);
