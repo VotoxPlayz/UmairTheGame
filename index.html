@@ -15,6 +15,15 @@
             <div id="turn-indicator">Turn: <span id="current-turn-label">Player 1</span></div>
         </header>
 
+        <!-- Victory Screen Modal -->
+        <div id="victory-screen" class="screen modal hidden">
+            <div class="modal-content">
+                <h1 id="victory-title">🎉 VICTORY! 🎉</h1>
+                <p id="victory-msg">Player 1 has defeated all enemy letters!</p>
+                <button class="btn mode-btn" onclick="location.reload()">Play Again 🔄</button>
+            </div>
+        </div>
+
         <!-- Game Mode Selection Screen -->
         <div id="mode-select-screen" class="screen">
             <h2>SELECT GAME MODE</h2>
@@ -91,7 +100,6 @@
             <div id="controls-panel">
                 <h3><span id="control-owner-tag">Player 1</span> - Active Letter: <span id="active-letter-tag">None</span></h3>
                 
-                <!-- Dynamic Hover Tooltip Display -->
                 <div id="ability-tooltip" class="tooltip-box">Hover over an ability to inspect its power.</div>
 
                 <div class="action-buttons">
@@ -100,7 +108,7 @@
                     <button id="btn-ability-2" class="btn action-btn" 
                         onmouseenter="showAbilityInfo(2)" onmouseleave="clearAbilityInfo()" onclick="prepareAbility(2)">Ability 2</button>
                     <button id="btn-ultimate" class="btn ult-btn" 
-                        onmouseenter="showUltInfo()" onmouseleave="clearAbilityInfo()" onclick="triggerUltimate()">Ultimate</button>
+                        onmouseenter="showUltInfo()" onmouseleave="clearAbilityInfo()" onclick="prepareUltimate()">Ultimate</button>
                     <button id="btn-skip" class="btn skip-btn" 
                         onmouseenter="showSkipInfo()" onmouseleave="clearAbilityInfo()" onclick="skipTurn()">Skip Turn (+<span id="skip-eitr-val">3</span> 🔮)</button>
                     <button id="btn-end-turn" class="btn end-btn" onclick="endTurn()">End Turn</button>
