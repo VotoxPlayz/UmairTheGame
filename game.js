@@ -15,10 +15,10 @@ let gameState = {
     lastUsedAbilityP1: null,
     lastUsedAbilityP2: null,
     charSelectStep: 1,
-    targetingState: null // { slot, ability } when waiting for enemy letter selection
+    targetingState: null
 };
 
-// Ability definitions per Letter (with target types and base damage/effects)
+// Ability definitions per Letter
 const LETTER_ABILITIES = {
     'U': {
         a1: { name: "Resurrection", cost: 12, target: "friendly", desc: "Revives 1 dead letter with 3.0 HP or heals lowest HP letter by 5.0." },
@@ -33,12 +33,12 @@ const LETTER_ABILITIES = {
         a2: { name: "Unity", cost: 7, target: "enemy_single", damage: 4.0, desc: "Deals 4.0 direct damage to a selected opponent letter." }
     },
     'I': {
-        a1: { name: "Poison", cost: 15, target: "enemy_single", damage: 3.5, desc: "Poisons target letter, dealing 3.5 damage and increasing damage intake." },
-        a2: { name: "Staff of Embers", cost: 10, target: "enemy_single", damage: 4.5, desc: "Burns target opponent letter for 4.5 damage." }
+        a1: { name: "Poison", cost: 15, target: "enemy_single", damage: 3.5, status: "poison", desc: "Poisons target letter (☠️ Poison), dealing 3.5 damage." },
+        a2: { name: "Staff of Embers", cost: 10, target: "enemy_single", damage: 4.5, status: "fire", desc: "Burns target opponent letter (🔥 On Fire) for 4.5 damage." }
     },
     'R': {
         a1: { name: "Eitr-Refined Happiness", cost: 12, target: "friendly", desc: "Heals your letters using Eitr energy." },
-        a2: { name: "Staff of Immunity", cost: 15, target: "friendly", desc: "Grants 50% damage resistance & debuff immunity for 2 rounds." }
+        a2: { name: "Staff of Immunity", cost: 15, target: "friendly", status: "shield", desc: "Grants target letter 🛡️ +50% resistance & debuff immunity for 2 rounds." }
     }
 };
 
@@ -52,7 +52,13 @@ class Player {
         this.ultAvailable = true;
         this.letters = {};
         LETTERS.forEach(l => {
-            this.letters[l] = { hp: 10.0, frozen: 0, resistance: 0 };
+            this.letters[l] = { 
+                hp: 10.0, 
+                frozen: 0, 
+                resistance: 0,
+                status: null, // 'fire', 'poison', 'shield', 'quarter_shield'
+                statusTurns: 0 
+            };
         });
     }
 
@@ -154,21 +160,34 @@ function render() {
             const isSelected = (pid === 'p1' && gameState.selectedLetterP1 === l && gameState.turn === 'p1') ||
                                (pid === 'p2' && gameState.selectedLetterP2 === l && gameState.turn === 'p2');
             
+            // Determine if card can be targeted by an active ability
             const isTargetable = gameState.targetingState && 
-                                 ((gameState.turn === 'p1' && pid === 'p2') || (gameState.turn === 'p2' && pid === 'p1')) && 
-                                 letterObj.hp > 0;
+                                 (
+                                   (gameState.targetingState.ability.target === "enemy_single" && ((gameState.turn === 'p1' && pid === 'p2') || (gameState.turn === 'p2' && pid === 'p1'))) ||
+                                   (gameState.targetingState.ability.target === "friendly" && pid === gameState.turn)
+                                 ) && letterObj.hp > 0;
 
             const card = document.createElement('div');
             card.className = `letter-card ${letterObj.hp <= 0 ? 'dead' : ''} ${letterObj.frozen > 0 ? 'frozen' : ''} ${isSelected ? 'selected' : ''} ${isTargetable ? 'targetable' : ''}`;
-            card.innerText = `${l} (${letterObj.hp.toFixed(1)})`;
+            
+            // Build Status Badges HTML
+            let statusHtml = '';
+            if (letterObj.hp > 0) {
+                if (letterObj.frozen > 0) statusHtml += `<span title="Frozen">❄️ Frozen</span>`;
+                if (letterObj.status === 'fire') statusHtml += `<span title="Burning">🔥 On Fire</span>`;
+                if (letterObj.status === 'poison') statusHtml += `<span title="Poisoned">☠️ Poison</span>`;
+                if (letterObj.status === 'shield') statusHtml += `<span title="Resistance">🛡️ +50%</span>`;
+                if (letterObj.status === 'quarter_shield') statusHtml += `<span title="Quarter Shield">🛡️ 25% Def</span>`;
+            }
+
+            card.innerHTML = `<div>${l}</div><div style="font-size:0.75rem;">${letterObj.hp.toFixed(1)}</div><div class="status-badges">${statusHtml}</div>`;
             
             card.onclick = () => {
                 if (gameState.targetingState) {
-                    // If we are waiting for an enemy letter target selection
                     if (isTargetable) {
                         executeTargetedAbility(pid, l);
                     } else {
-                        showPopup("Please select a valid live enemy letter target!");
+                        showPopup("Please select a valid target letter!");
                     }
                 } else {
                     if (letterObj.hp > 0 && pid === gameState.turn) {
@@ -219,18 +238,16 @@ function prepareAbility(slot) {
         return showPopup("Not enough 🔮 Eitr!");
     }
 
-    if (ability.target === "enemy_single") {
-        // Prompt player to click an opponent's letter
+    if (ability.target === "enemy_single" || ability.target === "friendly") {
         gameState.targetingState = { slot, ability };
-        showPopup(`Select an enemy letter to target with ${ability.name}!`);
+        showPopup(`Select a letter to target with ${ability.name}!`);
         render();
     } else {
-        // Execute self/friendly buffs immediately
         executeAbilityDirectly(slot, ability);
     }
 }
 
-// Execute Targeted Ability on Enemy Letter
+// Execute Targeted Ability on Letter
 function executeTargetedAbility(targetPlayerId, targetLetterKey) {
     const { slot, ability } = gameState.targetingState;
     gameState.targetingState = null;
@@ -246,12 +263,29 @@ function executeTargetedAbility(targetPlayerId, targetLetterKey) {
 
     gameState.actionsTakenTurn++;
 
-    // Apply damage to target letter
-    let dmg = ability.damage || 3.0;
-    targetPlayer.letters[targetLetterKey].hp = Math.max(0, targetPlayer.letters[targetLetterKey].hp - dmg);
-
-    logCombat(`${gameState.turn.toUpperCase()} used ${ability.name} from letter ${casterLetter} on opponent letter ${targetLetterKey}, dealing ${dmg} damage!`);
-    showPopup(`Dealt ${dmg} damage to ${targetLetterKey}!`);
+    if (ability.target === "enemy_single") {
+        let dmg = ability.damage || 3.0;
+        targetPlayer.letters[targetLetterKey].hp = Math.max(0, targetPlayer.letters[targetLetterKey].hp - dmg);
+        if (ability.status) {
+            targetPlayer.letters[targetLetterKey].status = ability.status;
+        }
+        logCombat(`${gameState.turn.toUpperCase()} used ${ability.name} on ${targetLetterKey}, dealing ${dmg} damage!`);
+        showPopup(`Dealt ${dmg} damage to ${targetLetterKey}!`);
+    } else if (ability.target === "friendly") {
+        if (ability.status === "shield") {
+            targetPlayer.letters[targetLetterKey].status = "shield";
+            logCombat(`${gameState.turn.toUpperCase()} applied Staff of Immunity 🛡️ +50% to ${targetLetterKey}.`);
+            showPopup(`Applied Shield to ${targetLetterKey}!`);
+        } else if (ability.status === "quarter_shield") {
+            targetPlayer.letters[targetLetterKey].status = "quarter_shield";
+            logCombat(`${gameState.turn.toUpperCase()} applied Quarter Shield to ${targetLetterKey}.`);
+            showPopup(`Applied Quarter Shield to ${targetLetterKey}!`);
+        } else {
+            targetPlayer.letters[targetLetterKey].hp = Math.min(10.0, targetPlayer.letters[targetLetterKey].hp + 4.0);
+            logCombat(`${gameState.turn.toUpperCase()} healed ${targetLetterKey} for 4.0 HP.`);
+            showPopup(`Healed ${targetLetterKey}!`);
+        }
+    }
 
     checkWinCondition();
     render();
@@ -269,12 +303,12 @@ function executeAbilityDirectly(slot, ability) {
 
     gameState.actionsTakenTurn++;
 
-    // Sample effect for friendly support abilities
     if (ability.name === "Resurrection") {
         let deadLetters = LETTERS.filter(letKey => p.letters[letKey].hp <= 0);
         if (deadLetters.length > 0) {
             let revKey = deadLetters[0];
             p.letters[revKey].hp = 3.0;
+            p.letters[revKey].status = null;
             logCombat(`${gameState.turn.toUpperCase()} revived letter ${revKey} with 3.0 HP!`);
             showPopup(`Revived ${revKey}!`);
         } else {
@@ -370,6 +404,7 @@ function aiTurn() {
                     let targetLetter = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
                     let dmg = ability.damage || 3.0;
                     targetPlayer.letters[targetLetter].hp = Math.max(0, targetPlayer.letters[targetLetter].hp - dmg);
+                    if (ability.status) targetPlayer.letters[targetLetter].status = ability.status;
                     logCombat(`AI used ${ability.name} on your letter ${targetLetter}, dealing ${dmg} damage!`);
                     showPopup(`AI attacked your ${targetLetter} for ${dmg} dmg!`);
                 } else {
