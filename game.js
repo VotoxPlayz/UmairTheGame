@@ -4,13 +4,17 @@ const INITIAL_EITR = 30;
 const LETTERS = ['U', 'M', 'A', 'I', 'R'];
 
 let gameState = {
+    mode: 'ai', // 'ai' or 'local'
     round: 1,
     turn: 'p1', // 'p1' or 'p2'
     p1: null,
     p2: null,
-    selectedLetter: 'U',
+    selectedLetterP1: 'U',
+    selectedLetterP2: 'U',
     actionsTakenTurn: 0,
-    lastUsedAbility: null
+    lastUsedAbilityP1: null,
+    lastUsedAbilityP2: null,
+    charSelectStep: 1 // 1 for P1, 2 for P2 in local mode
 };
 
 // Ability definitions per Letter
@@ -56,14 +60,36 @@ class Player {
     }
 }
 
-// Select Character & Initialize Game
-function selectCharacter(char) {
-    gameState.p1 = new Player('p1', char);
-    // AI or Player 2 chooses a random distinct character
-    const remaining = ['K', 'H', 'A', 'N'].filter(c => c !== char);
-    const p2Char = remaining[Math.floor(Math.random() * remaining.length)];
-    gameState.p2 = new Player('p2', p2Char);
+// Mode Selection
+function setGameMode(mode) {
+    gameState.mode = mode;
+    document.getElementById('mode-select-screen').classList.add('hidden');
+    document.getElementById('char-select-screen').classList.remove('hidden');
+    document.getElementById('p2-header-title').innerText = (mode === 'ai') ? 'AI Opponent' : 'Player 2';
+}
 
+// Character Selection Logic
+function selectCharacter(char) {
+    if (gameState.charSelectStep === 1) {
+        gameState.p1 = new Player('p1', char);
+        if (gameState.mode === 'ai') {
+            // AI picks random character automatically
+            const remaining = ['K', 'H', 'A', 'N'].filter(c => c !== char);
+            const p2Char = remaining[Math.floor(Math.random() * remaining.length)];
+            gameState.p2 = new Player('p2', p2Char);
+            startGameBattle();
+        } else {
+            // Local 2P mode: move to Player 2 selection
+            gameState.charSelectStep = 2;
+            document.getElementById('char-select-title').innerText = "Player 2: Select Your Character";
+        }
+    } else {
+        gameState.p2 = new Player('p2', char);
+        startGameBattle();
+    }
+}
+
+function startGameBattle() {
     document.getElementById('char-select-screen').classList.add('hidden');
     document.getElementById('battle-screen').classList.remove('hidden');
 
@@ -71,11 +97,17 @@ function selectCharacter(char) {
     document.getElementById('p2-char-badge').innerText = gameState.p2.char;
 
     render();
-    logCombat(`Battle Started! P1 selected ${char}, P2 selected ${p2Char}.`);
+    logCombat(`Battle Started! P1 (${gameState.p1.char}) vs ${gameState.mode === 'ai' ? 'AI' : 'Player 2'} (${gameState.p2.char}).`);
 }
 
 // UI Render Engine
 function render() {
+    const activePlayer = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
+    const activeLetter = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
+
+    document.getElementById('current-turn-label').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI Opponent' : 'Player 2');
+    document.getElementById('control-owner-tag').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI' : 'Player 2');
+
     // Update Stats Bars
     ['p1', 'p2'].forEach(pid => {
         const p = gameState[pid];
@@ -93,44 +125,58 @@ function render() {
         row.innerHTML = '';
         LETTERS.forEach(l => {
             const letterObj = p.letters[l];
+            const isSelected = (pid === 'p1' && gameState.selectedLetterP1 === l && gameState.turn === 'p1') ||
+                               (pid === 'p2' && gameState.selectedLetterP2 === l && gameState.turn === 'p2');
+            
             const card = document.createElement('div');
-            card.className = `letter-card ${letterObj.hp <= 0 ? 'dead' : ''} ${letterObj.frozen > 0 ? 'frozen' : ''} ${gameState.selectedLetter === l && pid === 'p1' ? 'selected' : ''}`;
+            card.className = `letter-card ${letterObj.hp <= 0 ? 'dead' : ''} ${letterObj.frozen > 0 ? 'frozen' : ''} ${isSelected ? 'selected' : ''}`;
             card.innerText = `${l} (${letterObj.hp.toFixed(1)})`;
-            if (pid === 'p1') {
-                card.onclick = () => { if (letterObj.hp > 0) { gameState.selectedLetter = l; render(); } };
-            }
+            
+            // Allow clicking letter only if it's that player's turn
+            card.onclick = () => {
+                if (letterObj.hp > 0 && pid === gameState.turn) {
+                    if (pid === 'p1') gameState.selectedLetterP1 = l;
+                    else gameState.selectedLetterP2 = l;
+                    render();
+                }
+            };
             row.appendChild(card);
         });
     });
 
-    // Update Action Button Labels based on selected letter
-    const sel = gameState.selectedLetter;
-    document.getElementById('active-letter-tag').innerText = sel;
-    if (LETTER_ABILITIES[sel]) {
-        document.getElementById('btn-ability-1').innerText = `${LETTER_ABILITIES[sel].a1.name} (${LETTER_ABILITIES[sel].a1.cost} Eitr)`;
-        document.getElementById('btn-ability-2').innerText = `${LETTER_ABILITIES[sel].a2.name} (${LETTER_ABILITIES[sel].a2.cost} Eitr)`;
+    // Update Action Button Labels based on active letter
+    document.getElementById('active-letter-tag').innerText = activeLetter;
+    if (LETTER_ABILITIES[activeLetter]) {
+        document.getElementById('btn-ability-1').innerText = `${LETTER_ABILITIES[activeLetter].a1.name} (${LETTER_ABILITIES[activeLetter].a1.cost} Eitr)`;
+        document.getElementById('btn-ability-2').innerText = `${LETTER_ABILITIES[activeLetter].a2.name} (${LETTER_ABILITIES[activeLetter].a2.cost} Eitr)`;
     }
 
     // Skip Eitr calculation
-    const currentSkipGain = 3 * Math.pow(2, gameState.p1.skipStreak);
+    const currentSkipGain = 3 * Math.pow(2, activePlayer.skipStreak);
     document.getElementById('skip-eitr-val').innerText = currentSkipGain;
+
+    // Disable controls if it's AI turn
+    document.getElementById('controls-panel').style.opacity = (gameState.turn === 'p2' && gameState.mode === 'ai') ? '0.5' : '1';
 }
 
 // Ability Triggers
 function triggerAbility(slot) {
+    if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
     if (gameState.actionsTakenTurn >= 2) {
         showPopup("Maximum 2 actions allowed per turn!");
         return;
     }
 
-    const p = gameState.p1;
-    const l = gameState.selectedLetter;
+    const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
+    const l = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
+    const lastAbility = gameState.turn === 'p1' ? gameState.lastUsedAbilityP1 : gameState.lastUsedAbilityP2;
+
     if (p.letters[l].hp <= 0) return showPopup("Dead letters cannot cast abilities!");
     if (p.letters[l].frozen > 0) return showPopup("This letter is Frozen!");
 
     const ability = slot === 1 ? LETTER_ABILITIES[l].a1 : LETTER_ABILITIES[l].a2;
 
-    if (gameState.lastUsedAbility === ability.name) {
+    if (lastAbility === ability.name) {
         return showPopup("Cannot use the exact same ability twice in a row!");
     }
     if (p.eitr < ability.cost) {
@@ -140,66 +186,122 @@ function triggerAbility(slot) {
     // Deduct Eitr & Reset Skip Streak
     p.eitr -= ability.cost;
     p.skipStreak = 0;
-    gameState.lastUsedAbility = ability.name;
+    if (gameState.turn === 'p1') gameState.lastUsedAbilityP1 = ability.name;
+    else gameState.lastUsedAbilityP2 = ability.name;
+
     gameState.actionsTakenTurn++;
 
-    // Execute Ability Logic
-    logCombat(`P1 used ${ability.name} on letter ${l}!`);
+    logCombat(`${gameState.turn.toUpperCase()} used ${ability.name} on letter ${l}!`);
     showPopup(`Used ${ability.name}!`);
 
+    checkWinCondition();
     render();
 }
 
 // Ultimate Ability Execution
 function triggerUltimate() {
-    const p = gameState.p1;
+    if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
+    const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     if (!p.ultAvailable) return showPopup("Ultimate already used!");
 
     p.ultAvailable = false;
     p.skipStreak = 0;
     gameState.actionsTakenTurn++;
 
-    logCombat(`P1 activated Ultimate Ability for Character ${p.char}!`);
+    logCombat(`${gameState.turn.toUpperCase()} activated Ultimate Ability for Character ${p.char}!`);
     showPopup(`Ultimate Activated!`);
     
+    checkWinCondition();
     render();
 }
 
 // Skip Turn Logic
 function skipTurn() {
-    const p = gameState.p1;
+    if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
+    const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     const gain = 3 * Math.pow(2, p.skipStreak);
     p.eitr = Math.min(MAX_EITR, p.eitr + gain);
     p.skipStreak++;
-    logCombat(`P1 skipped turn and gained +${gain} Eitr.`);
+    logCombat(`${gameState.turn.toUpperCase()} skipped turn and gained +${gain} Eitr.`);
     endTurn();
 }
 
 // End Turn & Pass to Next Player / AI
 function endTurn() {
+    if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
+
     gameState.actionsTakenTurn = 0;
     gameState.turn = gameState.turn === 'p1' ? 'p2' : 'p1';
 
-    if (gameState.turn === 'p2') {
-        // Increment round & passive Eitr gains
+    if (gameState.turn === 'p1') {
         gameState.round++;
-        gameState.p1.eitr = Math.min(MAX_EITR, gameState.p1.eitr + 1);
-        gameState.p2.eitr = Math.min(MAX_EITR, gameState.p2.eitr + 1);
-        
-        // Simple AI Turn
-        setTimeout(aiTurn, 600);
+        document.getElementById('round-num').innerText = gameState.round;
     }
 
-    document.getElementById('round-num').innerText = gameState.round;
+    // Add passive round Eitr
+    gameState.p1.eitr = Math.min(MAX_EITR, gameState.p1.eitr + 1);
+    gameState.p2.eitr = Math.min(MAX_EITR, gameState.p2.eitr + 1);
+
     render();
+
+    if (gameState.turn === 'p2' && gameState.mode === 'ai') {
+        setTimeout(aiTurn, 800);
+    }
 }
 
-// Basic AI Player
+// AI Turn Logic
 function aiTurn() {
-    const p2 = gameState.p2;
-    p2.eitr = Math.min(MAX_EITR, p2.eitr + 2);
-    logCombat(`P2 completed turn.`);
-    endTurn();
+    const aiPlayer = gameState.p2;
+    logCombat(`AI is thinking...`);
+
+    setTimeout(() => {
+        // Simple AI action: Try to use an available ability or skip
+        let aliveLetters = LETTERS.filter(l => aiPlayer.letters[l].hp > 0);
+        if (aliveLetters.length > 0) {
+            let chosenLetter = aliveLetters[Math.floor(Math.random() * aliveLetters.length)];
+            gameState.selectedLetterP2 = chosenLetter;
+            
+            let abilityKey = Math.random() > 0.5 ? 'a1' : 'a2';
+            let ability = LETTER_ABILITIES[chosenLetter][abilityKey];
+
+            if (aiPlayer.eitr >= ability.cost && gameState.lastUsedAbilityP2 !== ability.name) {
+                aiPlayer.eitr -= ability.cost;
+                aiPlayer.skipStreak = 0;
+                gameState.lastUsedAbilityP2 = ability.name;
+                logCombat(`AI used ${ability.name} on letter ${chosenLetter}!`);
+                showPopup(`AI used ${ability.name}!`);
+            } else {
+                let gain = 3 * Math.pow(2, aiPlayer.skipStreak);
+                aiPlayer.eitr = Math.min(MAX_EITR, aiPlayer.eitr + gain);
+                aiPlayer.skipStreak++;
+                logCombat(`AI skipped turn and gained +${gain} Eitr.`);
+                showPopup(`AI skipped turn!`);
+            }
+        }
+
+        checkWinCondition();
+        
+        // Switch back to Player 1
+        gameState.actionsTakenTurn = 0;
+        gameState.turn = 'p1';
+        render();
+    }, 1000);
+}
+
+// Check Win Condition
+function checkWinCondition() {
+    const p1Hp = gameState.p1.getTotalHp();
+    const p2Hp = gameState.p2.getTotalHp();
+
+    if (p1Hp <= 0) {
+        logCombat(`Player 2 / AI wins the game!`);
+        showPopup(`Game Over! ${gameState.mode === 'ai' ? 'AI' : 'Player 2'} Wins!`);
+        setTimeout(() => location.reload(), 4000);
+    } else if (p2Hp <= 0) {
+        logCombat(`Player 1 wins the game!`);
+        showPopup(`Game Over! Player 1 Wins!`);
+        setTimeout(() => location.reload(), 4000);
+    }
 }
 
 function showPopup(text) {
