@@ -247,7 +247,6 @@ header h1 {
     color: #fff;
 }
 
-/* Horizontal Multi-Status Badge Container */
 .status-badges {
     display: flex;
     flex-wrap: wrap;
