@@ -1,11 +1,12 @@
 :root {
-    --bg-color: #f7f9fc;
-    --card-bg: #ffffff;
-    --text-color: #2b2d42;
-    --p1-color: #e63946;
-    --p2-color: #457b9d;
-    --eitr-color: #8338ec;
-    --hp-color: #2a9d8f;
+    --bg-color: #0b0f19;
+    --card-bg: #131b2e;
+    --text-color: #f8fafc;
+    --neon-pink: #ff007f;
+    --neon-blue: #00f0ff;
+    --neon-purple: #bd00ff;
+    --neon-green: #39ff14;
+    --neon-gold: #ffd700;
 }
 
 body {
@@ -22,17 +23,33 @@ body {
     width: 100%;
     max-width: 960px;
     background: var(--card-bg);
-    border: 3px solid #111;
+    border: 3px solid var(--neon-blue);
     border-radius: 12px;
     padding: 20px;
-    box-shadow: 6px 6px 0px #111;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
 }
 
 header {
     text-align: center;
-    border-bottom: 2px solid #eee;
+    border-bottom: 2px solid #1e293b;
     padding-bottom: 10px;
     margin-bottom: 20px;
+}
+
+header h1 {
+    color: var(--neon-blue);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    margin: 0 0 5px 0;
+    letter-spacing: 2px;
+}
+
+#round-indicator, #turn-indicator {
+    color: #94a3b8;
+    font-weight: bold;
+}
+
+#current-turn-label {
+    color: var(--neon-pink);
 }
 
 .screen.hidden { display: none; }
@@ -48,7 +65,15 @@ header {
 .mode-btn {
     font-size: 1.1rem;
     padding: 15px 25px;
-    background: #fef08a;
+    background: #1e293b;
+    color: var(--neon-blue);
+    border: 2px solid var(--neon-blue);
+}
+
+.mode-btn:hover {
+    background: var(--neon-blue);
+    color: #000;
+    box-shadow: 0 0 15px var(--neon-blue);
 }
 
 /* Character Selection */
@@ -59,23 +84,24 @@ header {
 }
 
 .char-card {
-    border: 2px solid #222;
+    border: 2px solid #334155;
     border-radius: 8px;
     padding: 15px;
     cursor: pointer;
-    background: #fff;
-    transition: transform 0.1s, box-shadow 0.1s;
+    background: #0f172a;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 
 .char-card:hover {
     transform: translateY(-4px);
-    box-shadow: 4px 4px 0px #111;
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
 }
 
 .char-card h3 {
     font-size: 2rem;
     margin: 0 0 10px 0;
-    color: var(--p1-color);
+    color: var(--neon-pink);
 }
 
 /* Battlefield */
@@ -89,7 +115,8 @@ header {
 
 .player-side {
     flex: 1;
-    border: 2px dashed #bbb;
+    border: 2px dashed #334155;
+    background: #0f172a;
     padding: 15px;
     border-radius: 8px;
     text-align: center;
@@ -98,17 +125,25 @@ header {
 .char-badge {
     font-size: 3rem;
     font-weight: bold;
-    color: var(--p1-color);
+    color: var(--neon-pink);
+    text-shadow: 0 0 10px rgba(255, 0, 127, 0.6);
+}
+
+.vs-divider {
+    font-weight: bold;
+    font-size: 1.5rem;
+    color: var(--neon-gold);
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
 }
 
 .stat-bar {
     position: relative;
     height: 22px;
-    background: #e0e0e0;
+    background: #1e293b;
     border-radius: 11px;
     overflow: hidden;
     margin: 6px 0;
-    border: 1px solid #333;
+    border: 1px solid #475569;
 }
 
 .stat-bar .fill {
@@ -117,8 +152,8 @@ header {
     transition: width 0.3s ease;
 }
 
-.hp-bar .fill { background: var(--hp-color); }
-.eitr-bar .fill { background: var(--eitr-color); }
+.hp-bar .fill { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+.eitr-bar .fill { background: var(--neon-purple); box-shadow: 0 0 8px var(--neon-purple); }
 
 .stat-bar span {
     position: absolute;
@@ -138,37 +173,63 @@ header {
 }
 
 .letter-card {
-    border: 2px solid #333;
+    border: 2px solid #475569;
     padding: 8px 12px;
     border-radius: 6px;
     cursor: pointer;
     font-weight: bold;
-    background: #fff;
+    background: #1e293b;
+    color: #f8fafc;
+    transition: all 0.2s;
+}
+
+.letter-card:hover {
+    border-color: var(--neon-blue);
 }
 
 .letter-card.selected {
-    border-color: #ffb703;
-    background: #fff3b0;
+    border-color: var(--neon-gold);
+    background: #334155;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
 }
 
 .letter-card.dead {
     text-decoration: line-through;
-    opacity: 0.4;
+    opacity: 0.3;
     cursor: not-allowed;
-    background: #ccc;
+    background: #1e293b;
+    border-color: #334155;
 }
 
 .letter-card.frozen {
-    border-color: #00b4d8;
-    background: #caf0f8;
+    border-color: var(--neon-blue);
+    background: #0284c7;
+    color: #fff;
 }
 
-/* Action Controls */
+/* Action Controls & Tooltip */
 #controls-panel {
-    background: #f1f5f9;
+    background: #0f172a;
     padding: 15px;
     border-radius: 8px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #334155;
+}
+
+#controls-panel h3 {
+    margin-top: 0;
+    color: #cbd5e1;
+    font-size: 1rem;
+}
+
+.tooltip-box {
+    background: #1e293b;
+    border: 1px solid #475569;
+    color: var(--neon-blue);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    min-height: 24px;
+    margin-bottom: 12px;
 }
 
 .action-buttons {
@@ -181,37 +242,49 @@ header {
     flex: 1;
     min-width: 140px;
     padding: 10px;
-    border: 2px solid #111;
+    border: 2px solid #475569;
     border-radius: 6px;
     font-weight: bold;
     cursor: pointer;
-    background: #fff;
-    box-shadow: 2px 2px 0px #111;
+    background: #1e293b;
+    color: #f8fafc;
+    transition: all 0.2s;
 }
 
-.btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0px #111; }
-.ult-btn { background: #ffb703; }
-.skip-btn { background: #a2d2ff; }
-.end-btn { background: #b7e4c7; }
+.btn:hover {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+.action-btn { border-color: var(--neon-blue); }
+.ult-btn { background: #451a03; border-color: var(--neon-gold); color: var(--neon-gold); }
+.ult-btn:hover { box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+.skip-btn { background: #082f49; border-color: var(--neon-blue); color: var(--neon-blue); }
+.end-btn { background: #052e16; border-color: var(--neon-green); color: var(--neon-green); }
+.end-btn:hover { box-shadow: 0 0 10px rgba(57, 255, 20, 0.4); }
 
 /* Popup & Combat Log */
 .popup {
-    border: 2px solid #333;
-    background: #fef08a;
+    border: 2px solid var(--neon-gold);
+    background: #422006;
+    color: var(--neon-gold);
     padding: 10px;
     border-radius: 6px;
     font-weight: bold;
     margin-bottom: 10px;
     text-align: center;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
 }
 
 #combat-log {
     max-height: 100px;
     overflow-y: auto;
-    background: #1e293b;
-    color: #f8fafc;
+    background: #020617;
+    color: #38bdf8;
+    border: 1px solid #1e293b;
     padding: 10px;
     border-radius: 6px;
     font-size: 0.85rem;
     margin-bottom: 15px;
+    font-family: monospace;
 }
