@@ -193,6 +193,17 @@ header h1 {
     box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
 }
 
+.letter-card.targetable {
+    border-color: var(--neon-green);
+    background: #064e3b;
+    animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 5px var(--neon-green); }
+    100% { box-shadow: 0 0 15px var(--neon-green); }
+}
+
 .letter-card.dead {
     text-decoration: line-through;
     opacity: 0.3;
