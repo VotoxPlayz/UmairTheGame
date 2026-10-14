@@ -54,6 +54,32 @@ header h1 {
 
 .screen.hidden { display: none; }
 
+/* Modal Victory Overlay */
+.modal {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(11, 15, 25, 0.95);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.modal-content {
+    background: var(--card-bg);
+    border: 3px solid var(--neon-pink);
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    box-shadow: 0 0 30px var(--neon-pink);
+}
+
+.modal-content h1 {
+    color: var(--neon-gold);
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
 /* Mode Selection */
 .mode-buttons {
     display: flex;
@@ -273,17 +299,21 @@ header h1 {
     transition: all 0.2s;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
     border-color: var(--neon-blue);
     box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
 }
 
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-color: #334155;
+}
+
 .action-btn { border-color: var(--neon-blue); }
 .ult-btn { background: #451a03; border-color: var(--neon-gold); color: var(--neon-gold); }
-.ult-btn:hover { box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
 .skip-btn { background: #082f49; border-color: var(--neon-blue); color: var(--neon-blue); }
 .end-btn { background: #052e16; border-color: var(--neon-green); color: var(--neon-green); }
-.end-btn:hover { box-shadow: 0 0 10px rgba(57, 255, 20, 0.4); }
 
 /* Popup & Combat Log */
 .popup {
