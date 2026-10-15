@@ -67,6 +67,7 @@
             <div class="battlefield">
                 <!-- Player 1 Area -->
                 <div class="player-side" id="p1-side">
+                    <div class="turn-badge" id="p1-turn-badge">⚡ YOUR TURN ⚡</div>
                     <div class="char-badge" id="p1-char-badge">K</div>
                     <h3>Player 1</h3>
                     <div class="stats">
@@ -81,6 +82,7 @@
 
                 <!-- Player 2 / AI Area -->
                 <div class="player-side" id="p2-side">
+                    <div class="turn-badge" id="p2-turn-badge">⚡ YOUR TURN ⚡</div>
                     <div class="char-badge" id="p2-char-badge">A</div>
                     <h3 id="p2-header-title">Player 2</h3>
                     <div class="stats">
@@ -103,6 +105,8 @@
                 <div id="ability-tooltip" class="tooltip-box">Hover over an ability to inspect its power.</div>
 
                 <div class="action-buttons">
+                    <button id="btn-base-attack" class="btn base-btn" 
+                        onmouseenter="showBaseInfo()" onmouseleave="clearAbilityInfo()" onclick="prepareBaseAttack()">⚔️ Basic Strike (3 🔮)</button>
                     <button id="btn-ability-1" class="btn action-btn" 
                         onmouseenter="showAbilityInfo(1)" onmouseleave="clearAbilityInfo()" onclick="prepareAbility(1)">Ability 1</button>
                     <button id="btn-ability-2" class="btn action-btn" 
