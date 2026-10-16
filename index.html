@@ -8,6 +8,9 @@
 </head>
 <body>
     <div id="game-container">
+        <!-- Floating Visual Damage Numbers Overlay Container -->
+        <div id="damage-float-layer"></div>
+
         <!-- Header / Stage Info -->
         <header>
             <h1>⚡ UMAIR: THE GAME ⚡</h1>
@@ -41,7 +44,7 @@
             <div class="char-grid">
                 <div class="char-card" onclick="selectCharacter('K')">
                     <h3>K</h3>
-                    <p class="passive"><strong>Thorns:</strong> Opponent takes 10% reflect damage on attack.</p>
+                    <p class="passive"><strong>Thorns:</strong> Attacker takes 10% reflect damage back to the exact attacking letter.</p>
                     <p class="ultimate"><strong>Deflect (Ult):</strong> Reflects 100% attack damage & regains 100% damage as Eitr.</p>
                 </div>
                 <div class="char-card" onclick="selectCharacter('H')">
@@ -57,7 +60,7 @@
                 <div class="char-card" onclick="selectCharacter('N')">
                     <h3>N</h3>
                     <p class="passive"><strong>Healed Damage:</strong> 20% of damage dealt heals your lowest HP letter.</p>
-                    <p class="ultimate"><strong>Greydwarf Shaman (Ult):</strong> Heals all letters by 50% of highest HP letter + grants HP×10% resistance.</p>
+                    <p class="ultimate"><strong>Greydwarf Shaman (Ult):</strong> Heals all letters by 35% of highest HP letter + grants immunity.</p>
                 </div>
             </div>
         </div>
