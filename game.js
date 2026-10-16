@@ -30,7 +30,7 @@ const LETTER_ABILITIES = {
     },
     'M': {
         a1: { name: "Copycat", cost: 12, targetType: "enemy_single", bloodCost: 0.10, desc: "Copies opponent's last move damage to a target letter. (Costs 10% Blood Magic on M)." },
-        a2: { name: "Shatter Arc", cost: 8, targetType: "enemy_single", bloodCost: 0, desc: "Deals 4.0 fast magic damage to an enemy letter." }
+        a2: { name: "Mind Swap", cost: 18, targetType: "enemy_single", bloodCost: 0, desc: "Swaps current HP percentage between your letter M and a selected enemy letter!" }
     },
     'A': {
         a1: { name: "Conical Happiness", cost: 15, targetType: "direct", bloodCost: 0, desc: "Heals surrounding letters by 50% of A's HP, decaying by 50% each step." },
@@ -141,7 +141,7 @@ function showUltInfo() {
     if (p.char === 'K') { ultName = "Deflect"; ultDesc = "Reflects 100% attack damage & regains 100% damage as 🔮."; }
     else if (p.char === 'H') { ultName = "Absorb"; ultDesc = "Absorbs attack into health + 95% damage resistance for 2 turns."; }
     else if (p.char === 'A') { ultName = "Staff of Frost"; ultDesc = "Freeze 2 opponent letters for 1 round + deals 30% of highest HP letter damage."; }
-    else if (p.char === 'N') { ultName = "Greydwarf Shaman"; ultDesc = "Heals all letters by 50% of highest HP letter + grants HP×10% resistance."; }
+    else if (p.char === 'N') { ultName = "Greydwarf Shaman"; ultDesc = "Heals all letters by 35% of highest HP letter + grants HP×10% resistance."; }
     document.getElementById('ability-tooltip').innerHTML = `<strong>⚡ ${ultName} (Ultimate)</strong> — ${ultDesc}`;
 }
 
@@ -163,7 +163,6 @@ function render() {
     document.getElementById('current-turn-label').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI Opponent' : 'Player 2');
     document.getElementById('control-owner-tag').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI' : 'Player 2');
 
-    // Highlight Turn Cards
     document.getElementById('p1-side').classList.toggle('active-turn', gameState.turn === 'p1');
     document.getElementById('p2-side').classList.toggle('active-turn', gameState.turn === 'p2');
 
@@ -367,12 +366,14 @@ function handleTargetSelection(selectedLetter) {
 function executeBaseAttack(targetLetter) {
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     const opp = gameState.turn === 'p1' ? gameState.p2 : gameState.p1;
+    const activeL = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
 
     p.eitr -= 3;
     p.skipStreak = 0;
     gameState.actionsTakenTurn++;
 
-    applyDamageToLetter(opp, targetLetter, 2.5);
+    applyDamageToLetter(opp, targetLetter, 2.5, activeL);
+    triggerScreenShake();
     logCombat(`${gameState.turn.toUpperCase()} used Basic Strike ⚔️ on ${targetLetter} for 2.5 damage!`);
     showPopup(`Basic Strike dealt 2.5 dmg to ${targetLetter}!`);
 
@@ -419,14 +420,22 @@ function executeTargetedAbility(slot, ability, targets) {
     } else if (ability.name === "Copycat") {
         let lastDmg = gameState.turn === 'p1' ? gameState.lastDamageDealtByP2 : gameState.lastDamageDealtByP1;
         if (lastDmg === 0) lastDmg = 3.0;
-        applyDamageToLetter(opp, targets[0], lastDmg);
+        applyDamageToLetter(opp, targets[0], lastDmg, activeL);
+        triggerScreenShake();
         logCombat(`${gameState.turn.toUpperCase()} Copycat dealt ${lastDmg.toFixed(1)} damage to ${targets[0]}!`);
-    } else if (ability.name === "Shatter Arc") {
-        applyDamageToLetter(opp, targets[0], 4.0);
-        logCombat(`${gameState.turn.toUpperCase()} Shatter Arc dealt 4.0 damage to ${targets[0]}!`);
+    } else if (ability.name === "Mind Swap") {
+        let targetHpPercent = opp.letters[targets[0]].hp / 10.0;
+        let selfHpPercent = p.letters['M'].hp / 10.0;
+        
+        opp.letters[targets[0]].hp = selfHpPercent * 10.0;
+        p.letters['M'].hp = targetHpPercent * 10.0;
+        triggerScreenShake();
+        logCombat(`${gameState.turn.toUpperCase()} Mind Swap swapped HP percentages between M and ${targets[0]}!`);
+        showPopup(`Mind Swapped with ${targets[0]}!`);
     } else if (ability.name === "Eitr Overload") {
         let overloadDmg = p.eitr * 0.25;
-        applyDamageToLetter(opp, targets[0], overloadDmg);
+        applyDamageToLetter(opp, targets[0], overloadDmg, activeL);
+        triggerScreenShake();
         logCombat(`${gameState.turn.toUpperCase()} Eitr Overload converted energy into ${overloadDmg.toFixed(1)} damage on ${targets[0]}!`);
     } else if (ability.name === "Bastion") {
         targets.forEach(t => { 
@@ -436,7 +445,8 @@ function executeTargetedAbility(slot, ability, targets) {
     } else if (ability.name === "Unity") {
         let totalTeamHp = p.getTotalHp();
         let splitDmg = (totalTeamHp * 0.15) / targets.length;
-        targets.forEach(t => { applyDamageToLetter(opp, t, splitDmg); });
+        targets.forEach(t => { applyDamageToLetter(opp, t, splitDmg, activeL); });
+        triggerScreenShake();
         logCombat(`${gameState.turn.toUpperCase()} Unity dealt ${splitDmg.toFixed(1)} split damage to ${targets.join(', ')}.`);
     } else if (ability.name === "Poison") {
         targets.forEach(t => { 
@@ -497,12 +507,14 @@ function executeDirectAbility(slot, ability) {
     render();
 }
 
-// Execute Ultimate Abilities (Takes Entire Turn = 2 Action Slots)
+// Execute Ultimate Abilities
 function executeUltimateDirectly() {
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     p.ultAvailable = false;
     p.skipStreak = 0;
     gameState.actionsTakenTurn = 2;
+
+    triggerScreenShake();
 
     if (p.char === 'K') {
         logCombat(`${gameState.turn.toUpperCase()} activated Deflect (Ult)! Reflects 100% damage & restores Eitr.`);
@@ -513,11 +525,11 @@ function executeUltimateDirectly() {
         let maxHp = p.getHighestHpLetter();
         LETTERS.forEach(l => {
             if (p.letters[l].hp > 0) {
-                p.letters[l].hp = Math.min(10.0, p.letters[l].hp + (maxHp * 0.5));
+                p.letters[l].hp = Math.min(10.0, p.letters[l].hp + (maxHp * 0.35)); // Rebalanced 35%
                 p.letters[l].statuses.immunity = 2;
             }
         });
-        logCombat(`${gameState.turn.toUpperCase()} activated Greydwarf Shaman (Ult)! Healed team by 50% of highest HP (${(maxHp * 0.5).toFixed(1)} HP).`);
+        logCombat(`${gameState.turn.toUpperCase()} activated Greydwarf Shaman (Ult)! Healed team by 35% of highest HP (${(maxHp * 0.35).toFixed(1)} HP).`);
     }
 
     checkWinCondition();
@@ -527,16 +539,19 @@ function executeUltimateDirectly() {
 function executeUltimateTargeted(targets) {
     const p = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     const opp = gameState.turn === 'p1' ? gameState.p2 : gameState.p1;
+    const activeL = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
     p.ultAvailable = false;
     p.skipStreak = 0;
     gameState.actionsTakenTurn = 2;
+
+    triggerScreenShake();
 
     if (p.char === 'A') {
         let maxHp = p.getHighestHpLetter();
         let dmg = maxHp * 0.3;
         targets.forEach(t => {
             if (opp.letters[t].statuses.immunity <= 0) opp.letters[t].frozen = 1;
-            applyDamageToLetter(opp, t, dmg);
+            applyDamageToLetter(opp, t, dmg, activeL);
         });
         logCombat(`${gameState.turn.toUpperCase()} Staff of Frost (Ult) froze and dealt ${dmg.toFixed(1)} dmg to ${targets.join(', ')}!`);
     }
@@ -545,8 +560,8 @@ function executeUltimateTargeted(targets) {
     render();
 }
 
-// Helper Damage Processor with Passives & Statuses
-function applyDamageToLetter(targetPlayer, letterKey, rawDamage) {
+// Helper Damage Processor with K Thorns Fix & Visual Number Popups
+function applyDamageToLetter(targetPlayer, letterKey, rawDamage, attackerLetter = 'U') {
     let finalDmg = rawDamage;
 
     if (targetPlayer.letters[letterKey].statuses.poison > 0) finalDmg *= 1.75;
@@ -559,6 +574,7 @@ function applyDamageToLetter(targetPlayer, letterKey, rawDamage) {
     if (targetPlayer.char === 'H') finalDmg *= 0.85;
 
     targetPlayer.letters[letterKey].hp = Math.max(0, targetPlayer.letters[letterKey].hp - finalDmg);
+    spawnFloatingNumber(targetPlayer.id, letterKey, `-${finalDmg.toFixed(1)}`);
 
     if (targetPlayer.id === 'p1') {
         gameState.lastDamageDealtByP2 = finalDmg;
@@ -568,12 +584,41 @@ function applyDamageToLetter(targetPlayer, letterKey, rawDamage) {
         if (letterKey === 'M') gameState.lastDamageTakenByM_P2 = finalDmg;
     }
 
+    // Fixed K Thorns: Reflects directly back to the exact attacking letter
     if (targetPlayer.char === 'K') {
         const attackerPlayer = targetPlayer.id === 'p1' ? gameState.p2 : gameState.p1;
         const thornReflect = finalDmg * 0.10;
-        attackerPlayer.letters['U'].hp = Math.max(0, attackerPlayer.letters['U'].hp - thornReflect);
-        logCombat(`🌵 Thorns reflect dealt ${thornReflect.toFixed(1)} damage back!`);
+        if (attackerPlayer.letters[attackerLetter] && attackerPlayer.letters[attackerLetter].hp > 0) {
+            attackerPlayer.letters[attackerLetter].hp = Math.max(0, attackerPlayer.letters[attackerLetter].hp - thornReflect);
+            spawnFloatingNumber(attackerPlayer.id, attackerLetter, `-${thornReflect.toFixed(1)}`);
+            logCombat(`🌵 Thorns reflect dealt ${thornReflect.toFixed(1)} damage back to attacking letter ${attackerLetter}!`);
+        }
     }
+}
+
+// Visual Effects Utilities
+function triggerScreenShake() {
+    const el = document.getElementById('game-container');
+    el.classList.add('shake');
+    setTimeout(() => el.classList.remove('shake'), 350);
+}
+
+function spawnFloatingNumber(playerId, letterKey, text) {
+    const layer = document.getElementById('damage-float-layer');
+    const floatEl = document.createElement('div');
+    floatEl.className = 'float-num';
+    floatEl.innerText = text;
+
+    // Approximate positioning based on side and letter index
+    const isP1 = playerId === 'p1';
+    const lIndex = LETTERS.indexOf(letterKey);
+    const xBase = isP1 ? 15 + (lIndex * 7) : 60 + (lIndex * 7);
+    
+    floatEl.style.left = `${xBase}%`;
+    floatEl.style.top = `40%`;
+
+    layer.appendChild(floatEl);
+    setTimeout(() => floatEl.remove(), 800);
 }
 
 // Skip Turn Logic
@@ -590,7 +635,7 @@ function skipTurn() {
     endTurn();
 }
 
-// End Turn & Process Round Decrements & Execute Thresholds
+// End Turn & Increment Round Counter
 function endTurn() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
     gameState.targetingState = null;
@@ -598,6 +643,7 @@ function endTurn() {
     gameState.actionsTakenTurn = 0;
     gameState.turn = gameState.turn === 'p1' ? 'p2' : 'p1';
 
+    // Round increments when turn cycles back to Player 1
     if (gameState.turn === 'p1') {
         gameState.round++;
         document.getElementById('round-num').innerText = gameState.round;
@@ -607,7 +653,6 @@ function endTurn() {
             LETTERS.forEach(l => {
                 const letter = playerObj.letters[l];
                 if (letter.hp > 0) {
-                    // 🔥 Fire DoT: -25% HP, Execute if under 1.0 HP
                     if (letter.statuses.fire) {
                         if (letter.hp < 1.0) {
                             letter.hp = 0;
@@ -615,6 +660,7 @@ function endTurn() {
                         } else {
                             const fireDmg = letter.hp * 0.25;
                             letter.hp = Math.max(0, letter.hp - fireDmg);
+                            spawnFloatingNumber(pid, l, `-${fireDmg.toFixed(1)}`);
                             logCombat(`🔥 Fire DoT dealt ${fireDmg.toFixed(1)} damage (-25%) to ${pid.toUpperCase()}'s letter ${l}.`);
                         }
                     }
