@@ -81,6 +81,16 @@ class Player {
         return this.letters[maxL].hp;
     }
 
+    getLowestHpLetterKey() {
+        let lowestK = 'U';
+        LETTERS.forEach(l => {
+            if (this.letters[l].hp > 0 && (this.letters[l].hp < this.letters[lowestK].hp || this.letters[lowestK].hp <= 0)) {
+                lowestK = l;
+            }
+        });
+        return lowestK;
+    }
+
     getBastionCount() {
         return LETTERS.filter(l => this.letters[l].statuses.bastion).length;
     }
@@ -160,6 +170,7 @@ function render() {
     const activePlayer = gameState.turn === 'p1' ? gameState.p1 : gameState.p2;
     const activeLetter = gameState.turn === 'p1' ? gameState.selectedLetterP1 : gameState.selectedLetterP2;
 
+    document.getElementById('round-num').innerText = gameState.round;
     document.getElementById('current-turn-label').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI Opponent' : 'Player 2');
     document.getElementById('control-owner-tag').innerText = gameState.turn === 'p1' ? 'Player 1' : (gameState.mode === 'ai' ? 'AI' : 'Player 2');
 
@@ -525,7 +536,7 @@ function executeUltimateDirectly() {
         let maxHp = p.getHighestHpLetter();
         LETTERS.forEach(l => {
             if (p.letters[l].hp > 0) {
-                p.letters[l].hp = Math.min(10.0, p.letters[l].hp + (maxHp * 0.35)); // Rebalanced 35%
+                p.letters[l].hp = Math.min(10.0, p.letters[l].hp + (maxHp * 0.35));
                 p.letters[l].statuses.immunity = 2;
             }
         });
@@ -560,7 +571,7 @@ function executeUltimateTargeted(targets) {
     render();
 }
 
-// Helper Damage Processor with K Thorns Fix & Visual Number Popups
+// Helper Damage Processor with A Splash, N Heal, K Thorns, & Popups
 function applyDamageToLetter(targetPlayer, letterKey, rawDamage, attackerLetter = 'U') {
     let finalDmg = rawDamage;
 
@@ -576,6 +587,38 @@ function applyDamageToLetter(targetPlayer, letterKey, rawDamage, attackerLetter 
     targetPlayer.letters[letterKey].hp = Math.max(0, targetPlayer.letters[letterKey].hp - finalDmg);
     spawnFloatingNumber(targetPlayer.id, letterKey, `-${finalDmg.toFixed(1)}`);
 
+    const attackerPlayer = targetPlayer.id === 'p1' ? gameState.p2 : gameState.p1;
+
+    // Passive: A Conical Damage (25% Splash Damage to Adjacent Target Letters)
+    if (attackerPlayer.char === 'A') {
+        let targetIdx = LETTERS.indexOf(letterKey);
+        let splashDmg = finalDmg * 0.25;
+
+        // Splash Left
+        if (targetIdx - 1 >= 0 && targetPlayer.letters[LETTERS[targetIdx - 1]].hp > 0) {
+            targetPlayer.letters[LETTERS[targetIdx - 1]].hp = Math.max(0, targetPlayer.letters[LETTERS[targetIdx - 1]].hp - splashDmg);
+            spawnFloatingNumber(targetPlayer.id, LETTERS[targetIdx - 1], `-${splashDmg.toFixed(1)}`);
+            logCombat(`💥 Conical Damage splash dealt ${splashDmg.toFixed(1)} damage to adjacent ${LETTERS[targetIdx - 1]}!`);
+        }
+        // Splash Right
+        if (targetIdx + 1 < LETTERS.length && targetPlayer.letters[LETTERS[targetIdx + 1]].hp > 0) {
+            targetPlayer.letters[LETTERS[targetIdx + 1]].hp = Math.max(0, targetPlayer.letters[LETTERS[targetIdx + 1]].hp - splashDmg);
+            spawnFloatingNumber(targetPlayer.id, LETTERS[targetIdx + 1], `-${splashDmg.toFixed(1)}`);
+            logCombat(`💥 Conical Damage splash dealt ${splashDmg.toFixed(1)} damage to adjacent ${LETTERS[targetIdx + 1]}!`);
+        }
+    }
+
+    // Passive: N Healed Damage (20% of damage dealt heals lowest HP letter)
+    if (attackerPlayer.char === 'N') {
+        let healAmt = finalDmg * 0.20;
+        let lowestHpKey = attackerPlayer.getLowestHpLetterKey();
+        if (attackerPlayer.letters[lowestHpKey] && attackerPlayer.letters[lowestHpKey].hp > 0) {
+            attackerPlayer.letters[lowestHpKey].hp = Math.min(10.0, attackerPlayer.letters[lowestHpKey].hp + healAmt);
+            logCombat(`💚 N Healed Damage passive restored +${healAmt.toFixed(1)} HP to lowest letter ${lowestHpKey}!`);
+        }
+    }
+
+    // Tracking Last Damage
     if (targetPlayer.id === 'p1') {
         gameState.lastDamageDealtByP2 = finalDmg;
         if (letterKey === 'M') gameState.lastDamageTakenByM_P1 = finalDmg;
@@ -584,9 +627,8 @@ function applyDamageToLetter(targetPlayer, letterKey, rawDamage, attackerLetter 
         if (letterKey === 'M') gameState.lastDamageTakenByM_P2 = finalDmg;
     }
 
-    // Fixed K Thorns: Reflects directly back to the exact attacking letter
+    // Passive: K Thorns Reflect
     if (targetPlayer.char === 'K') {
-        const attackerPlayer = targetPlayer.id === 'p1' ? gameState.p2 : gameState.p1;
         const thornReflect = finalDmg * 0.10;
         if (attackerPlayer.letters[attackerLetter] && attackerPlayer.letters[attackerLetter].hp > 0) {
             attackerPlayer.letters[attackerLetter].hp = Math.max(0, attackerPlayer.letters[attackerLetter].hp - thornReflect);
@@ -609,7 +651,6 @@ function spawnFloatingNumber(playerId, letterKey, text) {
     floatEl.className = 'float-num';
     floatEl.innerText = text;
 
-    // Approximate positioning based on side and letter index
     const isP1 = playerId === 'p1';
     const lIndex = LETTERS.indexOf(letterKey);
     const xBase = isP1 ? 15 + (lIndex * 7) : 60 + (lIndex * 7);
@@ -635,19 +676,23 @@ function skipTurn() {
     endTurn();
 }
 
-// End Turn & Increment Round Counter
+// End Turn & Increment Round Counter Cleanly
 function endTurn() {
     if (gameState.turn === 'p2' && gameState.mode === 'ai') return;
     gameState.targetingState = null;
 
     gameState.actionsTakenTurn = 0;
-    gameState.turn = gameState.turn === 'p1' ? 'p2' : 'p1';
+    
+    // Switch active turn player
+    const previousTurn = gameState.turn;
+    gameState.turn = previousTurn === 'p1' ? 'p2' : 'p1';
 
-    // Round increments when turn cycles back to Player 1
+    // Increment Round counter whenever turn cycles back to Player 1
     if (gameState.turn === 'p1') {
         gameState.round++;
         document.getElementById('round-num').innerText = gameState.round;
 
+        // Process End-of-Round Status Decay for BOTH Players
         ['p1', 'p2'].forEach(pid => {
             const playerObj = gameState[pid];
             LETTERS.forEach(l => {
@@ -719,9 +764,9 @@ function aiTurn() {
 
         checkWinCondition();
         
+        // Return turn back to Player 1 & run endTurn to increment round properly
         gameState.actionsTakenTurn = 0;
-        gameState.turn = 'p1';
-        render();
+        endTurn();
     }, 1000);
 }
 
